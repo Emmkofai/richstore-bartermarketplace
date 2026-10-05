@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Manage customer orders, delivery locations, and order status on RichStore.">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  #stat-total-orders,
+  #stat-total-qty,
+  #stat-total-bill,
+  #stat-fulfillment,
+  .order-id-badge {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .orders-header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  #btn-refresh-orders {
+    font-family: var(--font-heading);
+    padding: 9px 18px;
+    font-size: 14.6px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  #btn-refresh-orders:active {
+    transform: scale(0.98);
+  }
+  @media (max-width: 768px) {
+    #btn-refresh-orders {
+      padding: 13px 24px !important;
+      font-size: 15.7px !important;
+      font-weight: 700 !important;
+      min-height: 46px;
+      border-radius: 8px;
+    }
+  }
+  @media (max-width: 480px) {
+    .orders-header-actions {
+      width: 100%;
+    }
+    #btn-refresh-orders {
+      width: 100%;
+      padding: 15px 26px !important;
+      font-size: 16.8px !important;
+      font-weight: 700 !important;
+      min-height: 50px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      justify-content: center;
+    }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="site-inner">
+    <a href="index.html" class="logo">RichStore<span class="dot">.</span></a>
+    <form class="searchbar" onsubmit="event.preventDefault(); location.href='index.html?search='+encodeURIComponent(this.q.value)">
+      <input type="text" name="q" placeholder="Search for anything…" autocomplete="off" aria-label="Search listings">
+      <button type="submit">Search</button>
+    </form>
+    <div class="nav-actions">
+      <a href="cart.html" class="cart-link" aria-label="Shopping cart">&#128722; <span class="cart-count" id="cart-count">0</span></a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" style="padding-top:24px;max-width:1300px;">
+  <!-- Sub-navigation Tabs -->
+  <div class="manage-subnav" style="display:flex;gap:10px;margin-bottom:24px;border-bottom:2px solid #eef1f6;padding-bottom:12px;flex-wrap:wrap;">
+    <a href="manage.html" class="manage-tab-btn" style="padding:9px 20px;border-radius:30px;font-weight:600;font-size:15.7px;text-decoration:none;color:var(--ink-lighter);background:#f0f4f8;transition:all 0.15s ease;">
+      My Listings
+    </a>
+    <a href="manage-orders.html" class="manage-tab-btn active" style="padding:9px 20px;border-radius:30px;font-weight:700;font-size:15.7px;text-decoration:none;color:#fff;background:var(--paper-raised);box-shadow:0 3px 10px rgba(0,0,205,0.25);">
+      Manage Orders
+    </a>
+  </div>
+
+  <!-- Page Header & Metrics Summary -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;margin-bottom:20px;">
+    <div>
+      <h1 class="section-title" style="margin-bottom:4px;display:flex;align-items:center;gap:10px;">
+        <span>Manage Orders</span>
+        <span id="order-count-badge" style="font-size:14.6px;padding:3px 10px;background:rgba(0,0,205,0.1);color:var(--paper-raised);border-radius:20px;font-weight:700;">0 Orders</span>
+      </h1>
+      <p style="color:var(--ink-lighter);font-size:15.7px;margin:0;">Track customer delivery locations, contact buyers, and fulfill product orders.</p>
+    </div>
+    <div class="orders-header-actions">
+      <button type="button" class="btn" id="btn-refresh-orders">
+        Refresh Orders
+      </button>
+    </div>
+  </div>
+
+  <!-- Metrics Grid -->
+  <div class="orders-metrics-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:24px;">
+    <div class="metric-card" style="background:#fff;border:1px solid #e1e8ed;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+      <div style="font-size:13.4px;color:var(--ink-lighter);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Total Orders</div>
+      <div id="stat-total-orders" style="font-size:29.1px;font-weight:800;color:var(--ink);margin:4px 0;">0</div>
+      <div style="font-size:13.4px;color:#10b981;">Active Transactions</div>
+    </div>
+    <div class="metric-card" style="background:#fff;border:1px solid #e1e8ed;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+      <div style="font-size:13.4px;color:var(--ink-lighter);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Total Items Demanded</div>
+      <div id="stat-total-qty" style="font-size:29.1px;font-weight:800;color:var(--paper-raised);margin:4px 0;">0 Qty</div>
+      <div style="font-size:13.4px;color:var(--ink-lighter);">Units ordered across items</div>
+    </div>
+    <div class="metric-card" style="background:#fff;border:1px solid #e1e8ed;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+      <div style="font-size:13.4px;color:var(--ink-lighter);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Total Gross Bill</div>
+      <div id="stat-total-bill" style="font-size:29.1px;font-weight:800;color:#047857;margin:4px 0;">GHs 0.00</div>
+      <div style="font-size:13.4px;color:var(--ink-lighter);">Cumulative order volume</div>
+    </div>
+    <div class="metric-card" style="background:#fff;border:1px solid #e1e8ed;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+      <div style="font-size:13.4px;color:var(--ink-lighter);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Fulfillment Rate</div>
+      <div id="stat-fulfillment" style="font-size:29.1px;font-weight:800;color:#d97706;margin:4px 0;">100%</div>
+      <div id="stat-pending-count" style="font-size:13.4px;color:var(--ink-lighter);">0 awaiting dispatch</div>
+    </div>
+  </div>
+
+  <!-- Search & Filter Controls -->
+  <div class="orders-filter-bar" style="background:#fff;border:1px solid #e1e8ed;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
+    <div style="display:flex;gap:12px;align-items:center;flex:1;min-width:260px;">
+      <div style="position:relative;width:100%;max-width:380px;">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#94a3b8;display:flex;align-items:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
+        <input type="text" id="order-search" aria-label="Search orders by buyer, location, phone, product, or order ID" placeholder="Search by buyer, location, phone, product, or order ID…" style="width:100%;padding:10px 14px 10px 36px;font-size:15.7px;font-weight:400;border:1px solid #cbd5e1;border-radius:25px;box-sizing:border-box;">
+      </div>
+      <select id="status-filter" aria-label="Filter orders by status" style="padding:10px 14px;border:1px solid #cbd5e1;border-radius:25px;font-size:15.7px;font-weight:600;background:#fff;color:var(--ink);cursor:pointer;">
+        <option value="ALL">All Statuses</option>
+        <option value="Processing">Processing</option>
+        <option value="Dispatched">Dispatched</option>
+        <option value="Delivered">Delivered</option>
+        <option value="Completed">Completed</option>
+        <option value="Pending">Pending</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+    </div>
+    <div style="font-size:14.6px;color:var(--ink-lighter);" id="filter-result-count">
+      Showing all orders
+    </div>
+  </div>
+
+  <!-- Orders Table Container -->
+  <div class="orders-table-wrapper" style="background:#fff;border:1px solid #e1e8ed;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,0.03);overflow:hidden;margin-bottom:40px;">
+    <div style="overflow-x:auto;">
+      <table class="orders-table" id="orders-table" style="width:100%;border-collapse:collapse;text-align:left;font-size:15.7px;">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;color:#475569;font-weight:700;font-size:13.4px;text-transform:uppercase;letter-spacing:0.6px;">
+            <th style="padding:14px 16px;width:160px;">1. Buyer's Name</th>
+            <th style="padding:14px 16px;width:180px;">2. Location</th>
+            <th style="padding:14px 16px;width:170px;">3. Contact Number</th>
+            <th style="padding:14px 16px;min-width:240px;">4. Product Details / Order ID</th>
+            <th style="padding:14px 16px;width:190px;">5. Amount<br><span style="font-size:12.3px;font-weight:600;color:var(--ink-lighter);text-transform:none;">(Total Qty + Total Bill)</span></th>
+            <th style="padding:14px 16px;width:130px;text-align:center;">Status & Action</th>
+          </tr>
+        </thead>
+        <tbody id="orders-tbody">
+          <tr>
+            <td colspan="6" style="padding:36px;text-align:center;color:var(--ink-lighter);">
+              <div style="font-weight:600;font-size:16.8px;color:var(--ink);margin-bottom:4px;">Loading customer orders…</div>
+              <div style="font-size:14.6px;">Please wait while orders are retrieved.</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Order Details Modal (View full details) -->
+  <div id="order-modal" class="modal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);z-index:999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;">
+    <div class="modal-content" style="background:#fff;max-width:600px;width:100%;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,0.25);overflow:hidden;animation:slideUp 0.2s ease-out;">
+      <div style="padding:18px 22px;background:var(--paper-raised);color:#fff;display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;font-size:20.2px;" id="modal-order-title">Order Details</h3>
+        <button type="button" id="btn-close-modal" style="background:none;border:none;color:#fff;font-size:24.6px;cursor:pointer;line-height:1;">&times;</button>
+      </div>
+      <div id="modal-order-body" style="padding:22px;max-height:80vh;overflow-y:auto;font-size:15.7px;">
+        <!-- Filled dynamically -->
+      </div>
+      <div style="padding:14px 22px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:10px;">
+        <button type="button" class="btn" id="btn-modal-done" style="padding:8px 18px;">Close</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="site"><em>RichStore. Copyright © 2026</em></footer>
+
+<script src="js/cart.js"></script>
+<script>
+(async function() {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    location.href = '/login.html?redirect=' + encodeURIComponent('/manage-orders.html');
+    return;
+  }
+
+  // Redirect buyers to their order tracking page
+  try {
+    const meRes = await fetch('/api/me', { headers: { Authorization: 'Bearer ' + token } });
+    if (meRes.ok) {
+      const meData = await meRes.json();
+      if (meData.user) currentUser = meData.user;
+      if (meData.user && meData.user.accountType === 'buyer') {
+        location.href = '/buyer-orders.html';
+        return;
+      }
+    }
+  } catch (e) {}
+
+  let allOrders = [];
+  let currentUser = null; // used to resolve this seller's own payout line
+
+  // Helper: Format phone number into clean WhatsApp link
+  function getWhatsAppUrl(phone, orderId, buyerName) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    let normalized = digits;
+    if (normalized.startsWith('0') && normalized.length === 10) {
+      normalized = '233' + normalized.slice(1);
+    }
+    const msg = encodeURIComponent(`Hello ${buyerName}, this is RichStore regarding your order ${orderId}.`);
+    return `https://wa.me/${normalized}?text=${msg}`;
+  }
+
+  // Helper: Render status pill
+  function getStatusBadge(status) {
+    const s = String(status || 'Processing').toLowerCase();
+    let bg = '#fef3c7';
+    let color = '#b45309';
+    let dot = '#d97706';
+    if (s.includes('released') || s.includes('complet') || s.includes('deliver')) {
+      bg = '#d1fae5';
+      color = '#065f46';
+      dot = '#059669';
+    } else if (s.includes('held')) {
+      bg = '#fef3c7';
+      color = '#92400e';
+      dot = '#d97706';
+    } else if (s.includes('dispatch') || s.includes('transit')) {
+      bg = '#dbeafe';
+      color = '#1e40af';
+      dot = '#2563eb';
+    } else if (s.includes('cancel') || s.includes('refund')) {
+      bg = '#fee2e2';
+      color = '#991b1b';
+      dot = '#dc2626';
+    }
+    return `<span class="status-chip" style="background:${bg};color:${color};padding:4px 10px;border-radius:20px;font-size:13.4px;font-weight:700;display:inline-flex;align-items:center;gap:6px;">
+      <span style="width:7px;height:7px;border-radius:50%;background:${dot};display:inline-block;"></span>${escapeHTML(status || 'Processing')}
+    </span>`;
+  }
+
+  // Resolve THIS seller's payout for an order. An order can contain items from several
+  // sellers, so we match payouts.sellers by seller id first, then by the item's seller name,
+  // and only then fall back to the legacy single-seller field. Never invent a payout.
+  function getMyPayout(order) {
+    const payouts = order.payouts || {};
+    const list = Array.isArray(payouts.sellers) ? payouts.sellers : [];
+    const myId = currentUser && (currentUser.id || currentUser.userId);
+    if (myId != null) {
+      const byId = list.find(p => String(p.sellerId) === String(myId));
+      if (byId) return byId;
+    }
+    if (list.length === 1) return list[0];
+    const myName = (currentUser && (currentUser.username || currentUser.storeName)) || '';
+    if (myName) {
+      const items = Array.isArray(order.items) ? order.items : [];
+      const myItemNames = items.map(it => String(it.seller || '').toLowerCase());
+      const byName = list.find(p => myItemNames.includes(String(p.recipient || p.name || '').toLowerCase()));
+      if (byName) return byName;
+    }
+    return payouts.seller || list[0] || null;
+  }
+
+  // Honest payout wording: PENDING means queued, never "paid".
+  function payoutStatusLabel(status) {
+    const s = String(status || '').toUpperCase();
+    if (s === 'SUCCESS') return { text: 'Payout paid', bg: '#dcfce7', color: '#15803d' };
+    if (s === 'FAILED')  return { text: 'Payout needs attention', bg: '#fee2e2', color: '#991b1b' };
+    if (s === 'PENDING') return { text: 'Payout queued', bg: '#fef3c7', color: '#92400e' };
+    return null;
+  }
+
+  // Compact, honest payment/escrow chips. While payment is pending we say so explicitly and
+  // surface the reference the buyer must quote.
+  function paymentStateChips(order) {
+    const ps = String(order.paymentStatus || '').toLowerCase();
+    const es = String(order.escrowStatus || '').toLowerCase();
+    const chip = (label, bg, color) => `<span style="font-size:12.3px;padding:2px 8px;background:${bg};color:${color};border-radius:10px;font-weight:700;display:inline-block;margin:0 4px 4px 0;">${escapeHTML(label)}</span>`;
+    let html = '';
+    if (ps === 'paid') {
+      html += chip('Payment received', '#dcfce7', '#15803d');
+      if (es === 'held') html += chip('Held in escrow', '#fef3c7', '#92400e');
+      else if (es === 'released') html += chip('Released', '#dcfce7', '#166534');
+      else if (es === 'refunded') html += chip('Refunded', '#fee2e2', '#991b1b');
+    } else if (ps === 'pending') {
+      html += chip('Waiting for buyer payment', '#fef3c7', '#92400e');
+      if (order.paymentReference) {
+        html += `<div style="font-size:11.4px;color:#78350f;font-family:var(--font-numeric);font-variant-numeric:tabular-nums;user-select:all;word-break:break-all;" title="Payment reference">Ref: ${escapeHTML(order.paymentReference)}</div>`;
+      }
+    } else if (ps === 'expired') {
+      html += chip('Payment expired', '#f1f5f9', '#475569');
+    } else if (ps === 'unverified') {
+      html += chip('Payment unverified', '#fffbeb', '#92400e');
+    } else {
+      html += chip('Awaiting payment', '#f1f5f9', '#475569');
+    }
+    return html;
+  }
+
+  async function fetchOrders() {
+    const tbody = document.getElementById('orders-tbody');
+    try {
+      const res = await fetch('/api/orders', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (res.status === 401) {
+        location.href = '/login.html?redirect=' + encodeURIComponent('/manage-orders.html');
+        return;
+      }
+      const data = await res.json();
+      allOrders = Array.isArray(data.orders) ? data.orders : [];
+      updateMetrics(allOrders);
+      renderOrders(allOrders);
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="padding:28px;text-align:center;color:#ef4444;">Failed to load orders. Please refresh or check your internet connection.</td></tr>`;
+    }
+  }
+
+  function updateMetrics(orders) {
+    document.getElementById('order-count-badge').textContent = `${orders.length} Orders`;
+    document.getElementById('stat-total-orders').textContent = orders.length;
+
+    let totalQty = 0;
+    let totalBill = 0;
+    let pendingCount = 0;
+
+    orders.forEach(o => {
+      totalQty += Number(o.totalQuantity) || 0;
+      totalBill += Number(o.total) || 0;
+      const s = String(o.status || '').toLowerCase();
+      if (!s.includes('deliver') && !s.includes('complet') && !s.includes('cancel')) {
+        pendingCount++;
+      }
+    });
+
+    document.getElementById('stat-total-qty').textContent = `${totalQty} Qty`;
+    document.getElementById('stat-total-bill').textContent = formatGHs(totalBill);
+    document.getElementById('stat-pending-count').textContent = `${pendingCount} orders in progress`;
+
+    const rate = orders.length > 0 ? Math.round(((orders.length - pendingCount) / orders.length) * 100) : 100;
+    document.getElementById('stat-fulfillment').textContent = `${rate}%`;
+  }
+
+  function renderOrders(ordersToDisplay) {
+    const tbody = document.getElementById('orders-tbody');
+    document.getElementById('filter-result-count').textContent = `Showing ${ordersToDisplay.length} of ${allOrders.length} orders`;
+
+    if (ordersToDisplay.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" style="padding:48px 20px;text-align:center;color:var(--ink-lighter);">
+            <div style="font-weight:700;font-size:17.9px;color:var(--ink);margin-bottom:4px;">No Orders Found</div>
+            <div style="font-size:15.7px;">No customer orders match your search criteria.</div>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    tbody.innerHTML = ordersToDisplay.map((order) => {
+      const items = Array.isArray(order.items) ? order.items : [];
+      const waUrl = getWhatsAppUrl(order.buyerPhone, order.id, order.buyerName);
+      const payout = getMyPayout(order);
+      const payoutLbl = payout ? payoutStatusLabel(payout.status) : null;
+
+      // Product details summary
+      const productLines = items.map(it => {
+        return `<div style="margin-bottom:4px;font-size:14.6px;line-height:1.35;display:flex;align-items:center;flex-wrap:wrap;gap:5px;">
+          <strong style="color:var(--ink);">${escapeHTML(it.title)}</strong> 
+          <span style="color:var(--ink-lighter);">× ${it.qty}</span>
+          <span style="color:#059669;font-weight:600;font-size:13.4px;margin-left:auto;font-family:var(--font-numeric);font-variant-numeric:tabular-nums;">(${formatGHs(Number(it.price) * Number(it.qty))})</span>
+        </div>`;
+      }).join('');
+
+      return `
+        <tr class="order-row" style="border-bottom:1px solid #eef2f6;transition:background 0.15s ease;" data-order-id="${escapeHTML(order.id)}">
+          <!-- 1. Buyers Name -->
+          <td style="padding:14px 16px;vertical-align:top;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;border-radius:50%;background:rgba(0,0,205,0.1);color:var(--paper-raised);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14.6px;flex-shrink:0;">
+                ${escapeHTML((order.buyerName || 'B').slice(0, 1).toUpperCase())}
+              </div>
+              <div>
+                <div style="font-weight:700;color:var(--ink);font-size:15.7px;">${escapeHTML(order.buyerName)}</div>
+                <div style="font-size:13.4px;color:var(--ink-lighter);">@${escapeHTML(order.buyer || 'guest')}</div>
+              </div>
+            </div>
+          </td>
+
+          <!-- 2. Location -->
+          <td style="padding:14px 16px;vertical-align:top;">
+            <div>
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.buyerLocation || 'Accra, Ghana')}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:#0000CD;line-height:1.35;text-decoration:none;display:inline-flex;align-items:center;gap:3px;" title="Open location in Google Maps">
+                📍 ${escapeHTML(order.buyerLocation || 'Accra, Ghana')}
+              </a>
+              <div style="font-size:12.3px;color:var(--ink-lighter);margin-top:2px;">Delivery Address</div>
+            </div>
+          </td>
+
+          <!-- 3. Contact Number -->
+          <td style="padding:14px 16px;vertical-align:top;">
+            <div>
+              <div>
+                <a href="tel:${escapeHTML(order.buyerPhone)}" style="color:var(--paper-raised);font-weight:700;text-decoration:none;font-size:15.7px;">
+                  ${escapeHTML(order.buyerPhone || 'Not provided')}
+                </a>
+              </div>
+              <div style="margin-top:6px;">
+                <a href="${waUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#25D366;color:#fff;border-radius:12px;font-size:12.3px;font-weight:700;text-decoration:none;">
+                  WhatsApp
+                </a>
+              </div>
+            </div>
+          </td>
+
+          <!-- 4. Product Details / Order ID -->
+          <td style="padding:14px 16px;vertical-align:top;">
+            <div style="margin-bottom:6px;">
+              <span class="order-id-badge" role="button" tabindex="0" style="font-size:13.4px;font-weight:700;background:#f1f5f9;color:#334155;padding:2px 8px;border-radius:6px;border:1px solid #cbd5e1;cursor:pointer;" title="Click to view details" onclick="showOrderDetails('${escapeHTML(order.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showOrderDetails('${escapeHTML(order.id)}');}">
+                #${escapeHTML(order.id)}
+              </span>
+              <span style="font-size:12.3px;color:var(--ink-lighter);margin-left:4px;">
+                ${formatDate(order.placedAt)}
+              </span>
+            </div>
+            <div class="order-product-list">
+              ${productLines}
+            </div>
+          </td>
+
+          <!-- 5. Amount: Buyer Paid (Account Held) & Seller Net Payout -->
+          <td style="padding:14px 16px;vertical-align:top;">
+            <div class="order-amount-box">
+              <div style="font-size:12.3px;color:#64748b;font-weight:600;margin-bottom:2px;">
+                Buyer Paid (Account):
+              </div>
+              <div style="font-size:15.7px;font-weight:800;color:#047857;font-family:var(--font-numeric);font-variant-numeric:tabular-nums;">
+                ${formatGHs(Number(order.buyerPaidTotal || order.total) || 0)}
+              </div>
+              <div style="margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:4px;">
+                <div style="font-size:12.3px;color:#1e40af;font-weight:700;">
+                  Your Net Payout:
+                </div>
+                <div style="font-size:16.8px;font-weight:800;color:var(--paper-raised);font-family:var(--font-numeric);font-variant-numeric:tabular-nums;">
+                  ${formatGHs(Number(order.sellerPayoutAmount || order.subtotal) || 0)}
+                </div>
+              </div>
+              <div style="margin-top:6px;">
+                ${paymentStateChips(order)}
+                ${payoutLbl ? `<div style="margin-top:2px;"><span style="font-size:12.3px;padding:2px 8px;background:${payoutLbl.bg};color:${payoutLbl.color};border-radius:10px;font-weight:700;">${escapeHTML(payoutLbl.text)}</span>${payout.note ? `<div style="font-size:11.4px;color:#64748b;margin-top:2px;line-height:1.35;">${escapeHTML(payout.note)}</div>` : ''}</div>` : ''}
+              </div>
+            </div>
+          </td>
+
+          <!-- Status & Action -->
+          <td style="padding:14px 16px;vertical-align:top;text-align:center;">
+            <div style="margin-bottom:8px;">
+              ${getStatusBadge(order.status)}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px;align-items:center;">
+              <!-- Sellers can only move an order through processing/dispatch. Delivered,
+                   Completed and Cancelled are rejected by the server (the buyer confirms
+                   receipt), so those options are removed rather than offered and failing. -->
+              <select class="status-select" data-id="${escapeHTML(order.id)}" aria-label="Update status for order ${escapeHTML(order.id)}" style="font-size:13.4px;padding:3px 6px;border-radius:6px;border:1px solid #cbd5e1;cursor:pointer;font-weight:600;background:#fff;">
+                ${!['Held', 'Processing', 'Dispatched', 'Released'].includes(order.status) ? `<option value="${escapeHTML(order.status || '')}" selected disabled>${escapeHTML(order.status || 'Unknown')} (current — buyer confirms)</option>` : ''}
+                <option value="Held" ${order.status === 'Held' ? 'selected' : ''}>Held in Account</option>
+                <option value="Processing" ${order.status === 'Processing' ? 'selected' : ''}>Processing</option>
+                <option value="Dispatched" ${order.status === 'Dispatched' ? 'selected' : ''}>Dispatched</option>
+                <option value="Released" ${order.status === 'Released' ? 'selected' : ''} disabled>Released (Buyer confirms receipt)</option>
+              </select>
+              <div style="font-size:11.4px;color:#94a3b8;margin-top:4px;max-width:120px;line-height:1.3;">Delivery, completion and cancellation are confirmed by the buyer.</div>
+              <button type="button" class="btn" onclick="showOrderDetails('${escapeHTML(order.id)}')" style="padding:4px 8px;font-size:12.3px;font-weight:600;border-radius:6px;width:100%;max-width:90px;">
+                Details
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Attach status change listeners
+    tbody.querySelectorAll('.status-select').forEach(select => {
+      select.dataset.prev = select.value; // remember the current status so the change can be cancelled
+      select.addEventListener('change', async (e) => {
+        const orderId = e.target.dataset.id;
+        const newStatus = e.target.value;
+        const prevStatus = e.target.dataset.prev || '';
+
+        // Explicit confirmation before sending the PUT (especially for Cancelled)
+        const isCancelling = String(newStatus).toLowerCase() === 'cancelled';
+        const confirmMsg = isCancelling
+          ? `Cancel Order #${orderId}?\n\nThis sets the order status to Cancelled and cannot be undone from this page.`
+          : `Change the status of Order #${orderId} to "${newStatus}"?`;
+        if (!window.confirm(confirmMsg)) {
+          e.target.value = prevStatus; // revert the select — nothing is sent
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/status`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ status: newStatus })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            e.target.dataset.prev = newStatus;
+            showToast(`Order #${orderId} updated to ${newStatus}`);
+            const o = allOrders.find(x => String(x.id) === String(orderId));
+            if (o) o.status = newStatus;
+            updateMetrics(allOrders);
+            renderOrders(filterOrders());
+          } else {
+            e.target.value = prevStatus;
+            showToast(data.error || 'Failed to update order status');
+          }
+        } catch (err) {
+          e.target.value = prevStatus;
+          showToast('Network error while updating status');
+        }
+      });
+    });
+  }
+
+  function filterOrders() {
+    const query = (document.getElementById('order-search')?.value || '').toLowerCase().trim();
+    const statusVal = document.getElementById('status-filter')?.value || 'ALL';
+
+    return allOrders.filter(order => {
+      // Status filter
+      if (statusVal !== 'ALL') {
+        const s = String(order.status || '').toLowerCase();
+        if (!s.includes(statusVal.toLowerCase())) return false;
+      }
+
+      // Search query filter
+      if (query) {
+        const matchBuyer = String(order.buyerName || '').toLowerCase().includes(query);
+        const matchLocation = String(order.buyerLocation || '').toLowerCase().includes(query);
+        const matchPhone = String(order.buyerPhone || '').toLowerCase().includes(query);
+        const matchOrderId = String(order.id || '').toLowerCase().includes(query);
+        const matchProduct = Array.isArray(order.items) && order.items.some(it => String(it.title || '').toLowerCase().includes(query));
+        return matchBuyer || matchLocation || matchPhone || matchOrderId || matchProduct;
+      }
+      return true;
+    });
+  }
+
+  // Event Listeners for Filters
+  document.getElementById('order-search')?.addEventListener('input', () => {
+    renderOrders(filterOrders());
+  });
+
+  document.getElementById('status-filter')?.addEventListener('change', () => {
+    renderOrders(filterOrders());
+  });
+
+  document.getElementById('btn-refresh-orders')?.addEventListener('click', () => {
+    fetchOrders();
+    showToast('Orders refreshed');
+  });
+
+  // Modal handlers
+  window.showOrderDetails = function(orderId) {
+    const order = allOrders.find(o => String(o.id) === String(orderId));
+    if (!order) return;
+
+    document.getElementById('modal-order-title').textContent = `Order Details: #${order.id}`;
+    const waUrl = getWhatsAppUrl(order.buyerPhone, order.id, order.buyerName);
+    const modalPayout = getMyPayout(order);
+    const modalPayoutLbl = modalPayout ? payoutStatusLabel(modalPayout.status) : null;
+
+    const itemsHtml = (order.items || []).map(it => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+        <div>
+          <div style="font-weight:700;color:var(--ink);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span>${escapeHTML(it.title)}</span>
+          </div>
+          <div style="font-size:13.4px;color:var(--ink-lighter);">Item ID: #${it.id} | Seller: @${escapeHTML(it.seller || 'RichStore')}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-weight:700;color:#059669;">${formatGHs(Number(it.price) * Number(it.qty))}</div>
+          <div style="font-size:13.4px;color:var(--ink-lighter);">${it.qty} × ${formatGHs(it.price)}</div>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('modal-order-body').innerHTML = `
+      <div style="background:#f8fafc;padding:14px;border-radius:12px;margin-bottom:18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <div style="font-size:12.3px;color:var(--ink-lighter);font-weight:600;">1. BUYER NAME</div>
+            <div style="font-weight:700;color:var(--ink);">${escapeHTML(order.buyerName)}</div>
+            <div style="font-size:13.4px;color:var(--ink-lighter);">Account: @${escapeHTML(order.buyer)}</div>
+          </div>
+          <div>
+            <div style="font-size:12.3px;color:var(--ink-lighter);font-weight:600;">2. DELIVERY LOCATION</div>
+            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.buyerLocation || 'Accra, Ghana')}" target="_blank" rel="noopener noreferrer" style="font-weight:700;color:#0000CD;text-decoration:none;display:inline-flex;align-items:center;gap:3px;" title="Open location in Google Maps">
+              📍 ${escapeHTML(order.buyerLocation || 'Accra, Ghana')}
+            </a>
+          </div>
+          <div>
+            <div style="font-size:12.3px;color:var(--ink-lighter);font-weight:600;">3. CONTACT NUMBER</div>
+            <div style="font-weight:700;color:var(--paper-raised);">${escapeHTML(order.buyerPhone)}</div>
+            <a href="${waUrl}" target="_blank" style="font-size:13.4px;color:#25D366;font-weight:700;text-decoration:none;">Open WhatsApp Chat</a>
+          </div>
+          <div>
+             <div style="font-size:12.3px;color:var(--ink-lighter);font-weight:600;">STATUS & PLACED AT</div>
+             <div>${getStatusBadge(order.status)}</div>
+             <div style="margin-top:6px;">${paymentStateChips(order)}</div>
+             <div style="font-size:13.4px;color:var(--ink-lighter);margin-top:2px;">${formatDate(order.placedAt)}</div>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin:0 0 10px;font-size:16.8px;color:var(--ink);">4. Product Details</h4>
+      <div style="margin-bottom:18px;">
+        ${itemsHtml}
+      </div>
+
+      <h4 style="margin:0 0 10px;font-size:16.8px;color:var(--ink);">5. Account Payment & Seller Payout Breakdown</h4>
+      <div style="background:#f1f5f9;padding:14px 18px;border-radius:10px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:15.7px;">
+          <span>Total Quantity Demanded:</span>
+          <strong>${order.totalQuantity} items</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:15.7px;">
+          <span style="font-weight:600;color:var(--paper-raised);">Your Net Seller Payout (100% Listed Price):</span>
+          <strong style="font-family:var(--font-numeric);font-variant-numeric:tabular-nums;color:var(--paper-raised);font-size:16.8px;">${formatGHs(Number(order.sellerPayoutAmount || order.subtotal) || 0)}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14.6px;color:#64748b;">
+          <span>Platform Site Charge (Applied to Buyer):</span>
+          <span style="font-family:var(--font-numeric);font-variant-numeric:tabular-nums;">+${formatGHs(Number(order.siteFeeAmount || order.siteFee) || 0)}</span>
+        </div>
+        <div style="border-top:2px dashed #cbd5e1;padding-top:8px;display:flex;justify-content:space-between;font-size:17.9px;font-weight:800;color:#047857;">
+          <span>Total Paid by Buyer:</span>
+          <span style="font-family:var(--font-numeric);font-variant-numeric:tabular-nums;">${formatGHs(Number(order.buyerPaidTotal || order.total) || 0)}</span>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;padding:10px 14px;background:#ecfdf5;border-radius:8px;border:1px solid #a7f3d0;font-size:13.4px;color:#065f46;line-height:1.5;">
+        ${modalPayoutLbl
+          ? `🛡️ <strong>Your payout:</strong> ${formatGHs(Number((modalPayout && modalPayout.amount) || order.sellerPayoutAmount || order.subtotal) || 0)} — ${escapeHTML(modalPayoutLbl.text)}.${modalPayout && modalPayout.note ? ' ' + escapeHTML(modalPayout.note) : ''}`
+          : `🛡️ <strong>Automated Account Payout:</strong> Your payout of ${formatGHs(Number(order.sellerPayoutAmount || order.subtotal) || 0)} will be transferred to your mobile money number once the buyer confirms delivery.`}
+      </div>
+    `;
+
+    document.getElementById('order-modal').style.display = 'flex';
+  };
+
+  document.getElementById('btn-close-modal')?.addEventListener('click', () => {
+    document.getElementById('order-modal').style.display = 'none';
+  });
+
+  document.getElementById('btn-modal-done')?.addEventListener('click', () => {
+    document.getElementById('order-modal').style.display = 'none';
+  });
+
+  document.getElementById('order-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'order-modal') {
+      document.getElementById('order-modal').style.display = 'none';
+    }
+  });
+
+  // Initial load
+  await fetchOrders();
+})();
+</script>
+</body>
+</html>

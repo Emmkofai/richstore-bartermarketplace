@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Pay for your order — RichStore</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* Page-specific rules only. Everything else reuses the shared classes/tokens in
+     style.css so this page tracks the rest of the site automatically. */
+  .pay-shell { max-width: 620px; margin: 0 auto; padding: 18px 0 48px; }
+  .pay-card { background: #fff; border-radius: var(--radius, 12px); padding: 20px; box-shadow: 0 6px 24px rgba(15,23,42,.08); }
+  .pay-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; font-size: 15.7px; color: #475569; }
+  .pay-row span:last-child { font-family: var(--font-numeric, monospace); font-variant-numeric: tabular-nums; color: #1e293b; font-weight: 600; }
+  .pay-total { border-top: 2px solid #e2e8f0; margin-top: 8px; padding-top: 12px; font-size: 20.2px; font-weight: 800; color: #0f172a; }
+  .pay-ref { display: flex; align-items: center; gap: 10px; background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+  .pay-ref code { font-size: 22.4px; font-weight: 800; letter-spacing: 1px; font-family: var(--font-numeric, monospace); color: #0f172a; }
+  .pay-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 13.4px; font-weight: 700; }
+  .pay-badge.pending { background: #fef3c7; color: #92400e; }
+  .pay-badge.held { background: #dcfce7; color: #166534; }
+  .pay-badge.released { background: #dbeafe; color: #1e40af; }
+  .pay-badge.ended { background: #fee2e2; color: #991b1b; }
+  .pay-note { font-size: 14.6px; color: var(--ink-lighter, #475569); line-height: 1.55; }
+  .pay-steps { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px 18px; margin: 14px 0; }
+  .pay-steps ol { margin: 8px 0 0 18px; padding: 0; font-size: 15.7px; color: #334155; line-height: 1.7; }
+  .pay-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .pay-actions .btn { flex: 1 1 auto; min-width: 160px; }
+  @media (max-width: 420px) {
+    .pay-ref { flex-direction: column; align-items: flex-start; }
+    .pay-actions .btn { min-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="site-inner">
+    <a class="logo" href="index.html">RichStore.</a>
+    <nav class="nav-actions">
+      <a class="cart-link" href="cart.html" aria-label="Cart">🛒<span class="cart-count" id="cart-count">0</span></a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="pay-shell" id="pay-shell">
+    <div class="pay-card">
+      <p class="pay-note" style="margin:0;">Loading your order…</p>
+    </div>
+  </div>
+</main>
+
+<script src="js/cart.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// Payment page. The order is created AWAITING PAYMENT by /api/checkout; this page
+// is where it becomes paid. Nothing here ever claims money has moved unless the
+// API says so — the escrow state on the order is the single source of truth.
+// ---------------------------------------------------------------------------
+
+const params = new URLSearchParams(location.search);
+const ORDER_ID = params.get('order') || '';
+const RETURNING_FROM_GATEWAY = params.get('verify') === '1';
+const shell = document.getElementById('pay-shell');
+
+let order = null;
+let channels = null;
+let pollTimer = null;
+let countdownTimer = null;
+
+// Shared helpers from cart.js, with local fallbacks so this page can never render
+// "undefined" if a helper is ever renamed.
+const money = (n) => (typeof window.formatGHs === 'function'
+  ? window.formatGHs(n)
+  : 'GHs ' + (Number(n) || 0).toFixed(2));
+const esc = (s) => (typeof window.escapeHTML === 'function'
+  ? window.escapeHTML(String(s == null ? '' : s))
+  : String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+const toast = (m) => (typeof window.showToast === 'function' ? window.showToast(m) : null);
+
+const PAID_STATES = ['Held', 'Released', 'Refunded'];
+const isPaid = (o) => o && o.paymentStatus === 'paid' && PAID_STATES.includes(String(o.escrowStatus));
+
+function message(html) {
+  shell.innerHTML = '<div class="pay-card">' + html + '</div>';
+}
+
+function statusBadge(o) {
+  const ps = String(o.paymentStatus || 'pending');
+  if (ps === 'paid' && o.escrowStatus === 'Held') return '<span class="pay-badge held">Paid · in escrow</span>';
+  if (ps === 'paid' && o.escrowStatus === 'Released') return '<span class="pay-badge released">Paid · released to seller</span>';
+  if (ps === 'paid' && o.escrowStatus === 'Refunded') return '<span class="pay-badge ended">Refunded</span>';
+  if (ps === 'expired') return '<span class="pay-badge ended">Expired</span>';
+  if (ps === 'unverified') return '<span class="pay-badge pending">Unverified</span>';
+  return '<span class="pay-badge pending">Awaiting payment</span>';
+}
+
+function itemLines(o) {
+  const items = Array.isArray(o.items) ? o.items : [];
+  return items.map((it) => `
+    <div class="pay-row">
+      <span>${esc(it.title || 'Item')}${Number(it.qty) > 1 ? ' &times; ' + Number(it.qty) : ''}</span>
+      <span>${money((Number(it.price) || 0) * Math.max(1, Number(it.qty) || 1))}</span>
+    </div>`).join('');
+}
+
+function startCountdown(o) {
+  if (countdownTimer) clearInterval(countdownTimer);
+  const el = document.getElementById('pay-countdown');
+  if (!el || !o.paymentExpiresAt) return;
+  const tick = () => {
+    const ms = Date.parse(o.paymentExpiresAt) - Date.now();
+    if (!Number.isFinite(ms) || ms <= 0) {
+      el.textContent = 'Payment window closed';
+      return;
+    }
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    el.textContent = h > 0 ? `${h}h ${m}m left` : `${m}m ${s}s left`;
+  };
+  tick();
+  countdownTimer = setInterval(tick, 1000);
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    const { ok, data } = await api.get('/api/orders/' + encodeURIComponent(ORDER_ID));
+    if (ok && data.order) {
+      order = data.order;
+      if (isPaid(order) || order.paymentStatus === 'expired') {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        render();
+      }
+    }
+  }, 10000);
+}
+
+function render() {
+  const o = order;
+  const badge = statusBadge(o);
+
+  // --- expired / cancelled -------------------------------------------------
+  if (o.paymentStatus === 'expired' || o.status === 'Expired') {
+    message(`
+      <div style="text-align:center;margin-bottom:10px;">${badge}</div>
+      <h1 class="section-title" style="justify-content:center;font-size:26.9px;">This order expired</h1>
+      <p class="pay-note" style="text-align:center;">No payment arrived within the 24-hour window, so the reserved stock was released back to the marketplace. Nothing was charged.</p>
+      <div class="pay-actions"><a class="btn primary" href="index.html">Browse items again</a></div>`);
+    return;
+  }
+  if (o.status === 'Cancelled') {
+    message(`
+      <div style="text-align:center;margin-bottom:10px;">${badge}</div>
+      <h1 class="section-title" style="justify-content:center;font-size:26.9px;">This order was cancelled</h1>
+      <p class="pay-note" style="text-align:center;">Nothing is owed. ${o.escrowStatus === 'Refunded' ? 'Any payment received is being refunded.' : 'No payment was received.'}</p>
+      <div class="pay-actions"><a class="btn primary" href="index.html">Browse items</a></div>`);
+    return;
+  }
+
+  // --- paid ----------------------------------------------------------------
+  if (isPaid(o)) {
+    const held = o.escrowStatus === 'Held';
+    const payoutLines = (o.payouts && Array.isArray(o.payouts.sellers) ? o.payouts.sellers : [])
+      .map((s) => `<div class="pay-row"><span>${esc(s.recipient)} — payout</span><span>${money(s.amount)} · ${esc(s.status)}</span></div>`)
+      .join('');
+    message(`
+      <div style="text-align:center;margin-bottom:12px;">${badge}</div>
+      <h1 class="section-title" style="justify-content:center;font-size:26.9px;">
+        ${held ? 'Payment received' : 'Order complete'}
+      </h1>
+      <p class="pay-note" style="text-align:center;">
+        ${held
+          ? 'Your ' + money(o.total) + ' is held in RichStore escrow. The seller is not paid until you confirm the item arrived as described.'
+          : 'This order is settled.'}
+      </p>
+      ${o.deliveryPin ? `
+        <div class="pay-ref" style="justify-content:center;">
+          <div style="text-align:center;">
+            <div class="pay-note" style="margin-bottom:4px;">Show this delivery PIN to the agent on arrival</div>
+            <code>${esc(o.deliveryPin)}</code>
+          </div>
+        </div>` : ''}
+      <div style="margin-top:12px;">
+        <div class="pay-row"><span>Paid</span><span>${money(o.total)}</span></div>
+        <div class="pay-row"><span>Reference</span><span>${esc(o.paymentReference || '—')}</span></div>
+        <div class="pay-row"><span>Payment method</span><span>${esc(o.paymentSource || '—')}</span></div>
+        <div class="pay-row"><span>Escrow status</span><span>${esc(o.escrowStatus)}</span></div>
+        ${payoutLines}
+      </div>
+      <div class="pay-actions">
+        ${held ? '<button class="btn primary" id="confirm-btn">I received it — release funds</button>' : ''}
+        <a class="btn secondary" href="buyer-orders.html">My orders</a>
+      </div>
+      ${held ? '<p class="pay-note" style="margin-top:12px;">Only press this once the item has actually arrived and matches the listing. Releasing funds cannot be undone.</p>' : ''}`);
+
+    const confirmBtn = document.getElementById('confirm-btn');
+    if (confirmBtn) confirmBtn.addEventListener('click', confirmDelivery);
+    return;
+  }
+
+  // --- awaiting payment ----------------------------------------------------
+  const gatewayLive = !!(channels && channels.gatewayLive);
+  const momoNumber = (channels && channels.channels && channels.channels.momoNumber) || '';
+  const momoName = (channels && channels.channels && channels.channels.momoName) || 'RichStore Platform Treasury';
+
+  message(`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
+      <div>
+        <div class="pay-note" style="margin:0;">Order</div>
+        <div style="font-weight:800;color:#0f172a;">${esc(o.id)}</div>
+      </div>
+      ${badge}
+    </div>
+
+    ${itemLines(o)}
+    <div class="pay-row"><span>Subtotal</span><span>${money(o.subtotal)}</span></div>
+    <div class="pay-row"><span>Buyer protection fee</span><span>${money(o.siteFee)}</span></div>
+    <div class="pay-row pay-total"><span>Total to pay</span><span>${money(o.total)}</span></div>
+
+    <div class="pay-ref">
+      <div style="flex:1;">
+        <div class="pay-note" style="margin:0 0 2px;">Your payment reference — quote this exactly</div>
+        <code id="pay-ref-code">${esc(o.paymentReference || '')}</code>
+      </div>
+      <button class="btn secondary" id="copy-ref" type="button" style="flex:0 0 auto;">Copy</button>
+    </div>
+
+    ${gatewayLive ? `
+      <div class="pay-actions">
+        <button class="btn primary" id="pay-now">Pay ${money(o.total)} now</button>
+      </div>
+      <p class="pay-note" style="margin-top:10px;">Card and mobile money, secured by our payment provider.</p>
+      <hr style="border:0;border-top:1px solid #e2e8f0;margin:18px 0;">
+    ` : ''}
+
+    <div class="pay-steps">
+      <strong style="font-size:15.7px;color:#0f172a;">Or pay by mobile-money transfer</strong>
+      <ol>
+        <li>Send <strong>${money(o.total)}</strong> to <strong>${esc(momoNumber || 'the platform number')}</strong>${momoName ? ' (' + esc(momoName) + ')' : ''}.</li>
+        <li>Use <strong>${esc(o.paymentReference || '')}</strong> as the reference / memo.</li>
+        <li>Come back and press “I have paid”. Transfers are confirmed by our team, usually within minutes.</li>
+      </ol>
+    </div>
+
+    <div class="pay-actions">
+      <button class="btn secondary" id="check-paid">I have paid — check status</button>
+      <a class="btn secondary" href="index.html">Keep shopping</a>
+    </div>
+    <p class="pay-note" style="margin-top:12px;">
+      Payment window: <span id="pay-countdown">—</span>. If nothing arrives the order expires and the stock is released, so nothing is owed.
+    </p>`);
+
+  startCountdown(o);
+  startPolling();
+
+  const copyBtn = document.getElementById('copy-ref');
+  if (copyBtn) copyBtn.addEventListener('click', copyReference);
+
+  const payNow = document.getElementById('pay-now');
+  if (payNow) payNow.addEventListener('click', startGatewayPayment);
+
+  const checkPaid = document.getElementById('check-paid');
+  if (checkPaid) checkPaid.addEventListener('click', checkPayment);
+}
+
+async function copyReference() {
+  const text = (order && order.paymentReference) || '';
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Reference copied');
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast('Reference copied'); } catch (e) { toast(text); }
+    document.body.removeChild(ta);
+  }
+}
+
+async function startGatewayPayment() {
+  const btn = document.getElementById('pay-now');
+  if (btn) { btn.disabled = true; btn.textContent = 'Starting secure payment…'; }
+  const { ok, data } = await api.post('/api/orders/' + encodeURIComponent(ORDER_ID) + '/payment/initialize', {});
+  if (!ok || !data.authorizationUrl) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Pay ' + money(order.total) + ' now'; }
+    toast((data && data.error) || 'Could not start the payment. You can still pay by transfer.');
+    return;
+  }
+  location.href = data.authorizationUrl;
+}
+
+async function checkPayment() {
+  const btn = document.getElementById('check-paid');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  const { ok, data } = await api.post('/api/orders/' + encodeURIComponent(ORDER_ID) + '/payment/verify', {});
+  if (!ok) {
+    if (btn) { btn.disabled = false; btn.textContent = 'I have paid — check status'; }
+    toast((data && data.error) || 'Could not check the payment right now.');
+    return;
+  }
+  order = data.order || order;
+  if (isPaid(order)) {
+    render();
+    toast('Payment confirmed — held in escrow');
+    return;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'I have paid — check status'; }
+  toast((data && data.note) || 'We have not received this payment yet.');
+}
+
+async function confirmDelivery() {
+  const btn = document.getElementById('confirm-btn');
+  if (!btn) return;
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = 'Tap again to release the funds';
+    setTimeout(() => { if (btn) { btn.dataset.armed = '0'; btn.textContent = 'I received it — release funds'; } }, 6000);
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Releasing…';
+  const { ok, data } = await api.post('/api/orders/' + encodeURIComponent(ORDER_ID) + '/confirm-delivery', {});
+  if (!ok) {
+    btn.disabled = false;
+    btn.dataset.armed = '0';
+    btn.textContent = 'I received it — release funds';
+    toast((data && data.error) || 'Could not release the funds.');
+    return;
+  }
+  const refreshed = await api.get('/api/orders/' + encodeURIComponent(ORDER_ID));
+  if (refreshed.ok && refreshed.data.order) order = refreshed.data.order;
+  render();
+  toast((data && data.message) || 'Delivery confirmed');
+}
+
+async function boot() {
+  if (!ORDER_ID) {
+    message('<h1 class="section-title" style="justify-content:center;font-size:24.6px;">No order selected</h1>' +
+      '<p class="pay-note" style="text-align:center;">Open <a href="buyer-orders.html">My orders</a> and choose “Complete payment”.</p>');
+    return;
+  }
+
+  const configReq = api.get('/api/payment/config');
+
+  // Coming back from the gateway: ask the server to verify before rendering anything,
+  // so the buyer never sees a hopeful "paid" screen that the server has not confirmed.
+  if (RETURNING_FROM_GATEWAY) {
+    await api.post('/api/orders/' + encodeURIComponent(ORDER_ID) + '/payment/verify', {});
+  }
+
+  const [{ ok, data }, configRes] = await Promise.all([
+    api.get('/api/orders/' + encodeURIComponent(ORDER_ID)),
+    configReq
+  ]);
+
+  if (configRes && configRes.ok) channels = configRes.data;
+  if (!ok && data && data.error && /authentication/i.test(data.error)) {
+    location.href = '/login.html?redirect=' + encodeURIComponent('/pay.html?order=' + ORDER_ID);
+    return;
+  }
+  if (!ok) {
+    message('<h1 class="section-title" style="justify-content:center;font-size:24.6px;">Order unavailable</h1>' +
+      '<p class="pay-note" style="text-align:center;">' + esc((data && data.error) || 'We could not load this order.') + '</p>' +
+      '<div class="pay-actions"><a class="btn secondary" href="buyer-orders.html">My orders</a></div>');
+    return;
+  }
+
+  order = data.order;
+  render();
+}
+
+boot();
+</script>
+</body>
+</html>

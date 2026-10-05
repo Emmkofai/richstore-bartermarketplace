@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="View and manage your RichStore profile.">
+<title>User Profile — RichStore</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="site">
+  <div class="site-inner">
+    <a href="index.html" class="logo">RichStore<span class="dot">.</span></a>
+    <form class="searchbar" onsubmit="event.preventDefault(); location.href='index.html?search='+encodeURIComponent(this.q.value)">
+      <input type="text" name="q" placeholder="Search for anything…" autocomplete="off" aria-label="Search listings">
+      <button type="submit">Search</button>
+    </form>
+    <div class="nav-actions">
+      <a href="cart.html" class="cart-link" aria-label="Shopping cart">🛒 <span class="cart-count" id="cart-count">0</span></a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" style="padding-top:32px;display:flex;justify-content:center;">
+  <div class="profile-card">
+    <div class="profile-header">
+      <div class="profile-avatar-large" id="profile-avatar">?</div>
+      <div class="profile-info">
+        <h1 class="profile-username" id="display-username">Loading…</h1>
+        <div class="profile-badges" id="profile-badges">
+          <!-- Dynamically populated badges -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone Verification Alert if Unverified -->
+    <div id="unverified-phone-banner" style="display:none;background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px 18px;margin-bottom:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <div style="color:#92400e;font-size:15.7px;font-weight:600;">
+          Your phone number is not verified. Verify your number to unlock all features.
+        </div>
+        <button type="button" class="btn primary" id="btn-verify-now" style="padding:8px 16px;font-size:14.6px;" onclick="openProfileOtpModal()">
+          Verify Now
+        </button>
+      </div>
+    </div>
+
+    <!-- Editable Profile Form -->
+    <form id="profile-form">
+      <!-- Seller Specific Fields -->
+      <div id="seller-details" style="display:none;">
+        <div class="profile-section-title">Store Details</div>
+        <div class="field">
+          <label for="prof-store-name">Store Name</label>
+          <input id="prof-store-name" type="text" placeholder="Your Store Name">
+        </div>
+        <div class="field">
+          <label for="prof-store-location">Store Location</label>
+          <div class="gps-input-wrapper">
+            <input id="prof-store-location" type="text" placeholder="Store physical location">
+            <button type="button" class="gps-fetch-btn" onclick="fetchProfileGPS('seller')">
+              Update GPS
+            </button>
+          </div>
+          <div id="prof-seller-gps-badge" class="gps-address-badge" style="display:none;"></div>
+          <input type="hidden" id="prof-seller-gps-address" value="">
+        </div>
+      </div>
+
+      <!-- Buyer Specific Fields -->
+      <div id="buyer-details" style="display:none;">
+        <div class="profile-section-title">Delivery & Buyer Details</div>
+        <div class="field">
+          <label for="prof-buyer-name">Full Name</label>
+          <input id="prof-buyer-name" type="text" placeholder="Your Name">
+        </div>
+        <div class="field">
+          <label for="prof-buyer-location">Delivery Address / Location</label>
+          <div class="gps-input-wrapper">
+            <input id="prof-buyer-location" type="text" placeholder="Default delivery location">
+            <button type="button" class="gps-fetch-btn" onclick="fetchProfileGPS('buyer')">
+              Update GPS
+            </button>
+          </div>
+          <div id="prof-buyer-gps-badge" class="gps-address-badge" style="display:none;"></div>
+          <input type="hidden" id="prof-buyer-gps-address" value="">
+        </div>
+      </div>
+
+      <!-- Shared Contact Details -->
+      <div class="profile-section-title" style="margin-top:20px;">Contact Information</div>
+      <div class="field">
+        <label for="prof-phone">Phone Number</label>
+        <input id="prof-phone" type="tel" placeholder="e.g. 050 123 4567">
+        <p class="hint" style="font-size:13.4px;color:var(--ink-lighter);margin-top:4px;">
+          Note: Changing your phone number requires SMS re-verification.
+        </p>
+      </div>
+
+      <button class="btn primary" type="submit" id="btn-save-profile" style="width:100%;padding:14px;font-size:16.8px;margin-top:10px;">
+        Save Changes
+      </button>
+    </form>
+
+    <!-- Navigation / Action Quick Links -->
+    <div class="profile-section" style="margin-top:32px;border-top:2px solid #eef1f6;padding-top:24px;">
+      <div class="profile-section-title">Quick Actions</div>
+      <div class="profile-actions-grid" id="profile-actions-grid">
+        <!-- Injected based on accountType -->
+      </div>
+    </div>
+
+    <!-- Payments & Escrow — fed by GET /api/my-payments (added server-side) -->
+    <div class="profile-section" style="margin-top:32px;border-top:2px solid #eef1f6;padding-top:24px;">
+      <div class="profile-section-title">Payments &amp; Escrow</div>
+      <div id="payments-body">
+        <p style="color:var(--ink-lighter);font-size:15.7px;margin:0;">Loading payments…</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- OTP Phone Verification Modal for Profile -->
+<div class="otp-overlay" id="profile-otp-modal" style="display:none;">
+  <div class="otp-card">
+    <button type="button" class="otp-close-btn" onclick="closeProfileOtpModal()">&times;</button>
+    <div id="prof-otp-step-code">
+      <h2>Verify Phone Number</h2>
+      <p>We sent a 6-digit verification code to <span class="otp-phone-display" id="prof-otp-phone-display"></span></p>
+      <div class="field">
+        <input type="text" id="prof-otp-code" class="otp-code-input" maxlength="6" placeholder="000000" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+      </div>
+      <button class="btn primary" id="prof-otp-verify-btn" type="button" style="width:100%;padding:14px;" onclick="verifyProfileOtp()">Verify Code</button>
+      <div class="otp-timer" id="prof-otp-dev-hint" style="display:none;color:#0000CD;font-weight:700;margin-top:8px;"></div>
+      <div class="otp-timer" id="prof-otp-resend"></div>
+      <div class="otp-timer" id="prof-otp-code-error"></div>
+    </div>
+    <div id="prof-otp-step-success" style="display:none;">
+      <div class="otp-success">✓</div>
+      <h2>Phone Verified!</h2>
+      <p>Your phone number has been confirmed.</p>
+      <button class="btn primary" type="button" style="width:100%;padding:14px;" onclick="closeProfileOtpModal(); location.reload();">Done</button>
+    </div>
+  </div>
+</div>
+
+<footer class="site"><em>RichStore. Copyright © 2026</em></footer>
+
+<script src="js/cart.js"></script>
+<script>
+let currentUser = null;
+let profileResendTimer = null;
+
+async function loadProfile() {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    location.href = '/login.html?redirect=/profile.html';
+    return;
+  }
+
+  const existingError = document.getElementById('profile-load-error');
+  if (existingError) existingError.remove();
+
+  try {
+    const res = await fetch('/api/me', {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!res.ok) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      location.href = '/login.html?redirect=/profile.html';
+      return;
+    }
+    const data = await res.json();
+    currentUser = data.user;
+    localStorage.setItem('auth_user', JSON.stringify(currentUser));
+    renderProfile();
+  } catch (err) {
+    renderProfileError();
+  }
+}
+
+// /api/me could not be reached — never leave the page stuck on "Loading…"
+function renderProfileError() {
+  const card = document.querySelector('.profile-card');
+  const usernameEl = document.getElementById('display-username');
+  const avatarEl = document.getElementById('profile-avatar');
+  const form = document.getElementById('profile-form');
+  const banner = document.getElementById('unverified-phone-banner');
+
+  if (usernameEl) usernameEl.textContent = 'Unable to load profile';
+  if (avatarEl) avatarEl.textContent = '!';
+  if (banner) banner.style.display = 'none';
+  if (form) form.style.display = 'none';
+  if (!card || document.getElementById('profile-load-error')) return;
+
+  const box = document.createElement('div');
+  box.id = 'profile-load-error';
+  box.setAttribute('role', 'alert');
+  box.style.cssText = 'margin:18px 0;padding:16px 18px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:12px;color:#991b1b;font-size:15.7px;line-height:1.5;';
+  box.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px;">We couldn't load your profile.</div>
+    <div style="margin-bottom:12px;">Please check your connection and try again.</div>`;
+
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'btn primary';
+  retry.textContent = 'Retry';
+  retry.style.cssText = 'padding:9px 20px;font-size:14.6px;';
+  retry.addEventListener('click', () => {
+    box.remove();
+    if (form) form.style.display = '';
+    if (usernameEl) usernameEl.textContent = 'Loading…';
+    loadProfile();
+  });
+  box.appendChild(retry);
+
+  const header = card.querySelector('.profile-header');
+  if (header && header.parentNode === card) {
+    card.insertBefore(box, header.nextSibling);
+  } else {
+    card.appendChild(box);
+  }
+}
+
+function renderProfile() {
+  if (!currentUser) return;
+  const isSeller = currentUser.accountType !== 'buyer';
+
+  document.getElementById('display-username').textContent = currentUser.username;
+  document.getElementById('profile-avatar').textContent = (currentUser.username || 'U')[0].toUpperCase();
+
+  // Badges
+  const badgesDiv = document.getElementById('profile-badges');
+  badgesDiv.innerHTML = `
+    <span class="account-type-badge ${isSeller ? 'seller' : 'buyer'}">
+      ${isSeller ? 'Seller Account' : 'Buyer Account'}
+    </span>
+    ${currentUser.isAdmin ? '<span class="account-type-badge seller" style="background:#0000CD;color:#fff;">Administrator</span>' : ''}
+    ${currentUser.phoneVerified ? 
+      '<span class="account-type-badge buyer" style="background:#ecfdf5;color:#065f46;border-color:#a7f3d0;">Verified Phone</span>' : 
+      '<span class="account-type-badge" style="background:#fffbeb;color:#b45309;border-color:#fde68a;">Phone Unverified</span>'}
+  `;
+
+  // Verification banner
+  const banner = document.getElementById('unverified-phone-banner');
+  banner.style.display = currentUser.phoneVerified ? 'none' : 'block';
+
+  // Populate Form Fields
+  document.getElementById('prof-phone').value = currentUser.phone || '';
+
+  if (isSeller) {
+    document.getElementById('seller-details').style.display = 'block';
+    document.getElementById('prof-store-name').value = currentUser.storeName || '';
+    document.getElementById('prof-store-location').value = currentUser.storeLocation || '';
+    document.getElementById('prof-seller-gps-address').value = currentUser.storeGpsAddress || '';
+    if (currentUser.storeGpsAddress) {
+      const b = document.getElementById('prof-seller-gps-badge');
+      b.style.display = 'flex';
+      b.innerHTML = `<div><strong>GPS:</strong> ${escapeHTML(currentUser.storeGpsAddress)}</div>`;
+    }
+  } else {
+    document.getElementById('buyer-details').style.display = 'block';
+    document.getElementById('prof-buyer-name').value = currentUser.name || '';
+    document.getElementById('prof-buyer-location').value = currentUser.location || '';
+    document.getElementById('prof-buyer-gps-address').value = currentUser.gpsAddress || '';
+    if (currentUser.gpsAddress) {
+      const b = document.getElementById('prof-buyer-gps-badge');
+      b.style.display = 'flex';
+      b.innerHTML = `<div><strong>GPS:</strong> ${escapeHTML(currentUser.gpsAddress)}</div>`;
+    }
+  }
+
+  // Quick Action Buttons
+  const actionsDiv = document.getElementById('profile-actions-grid');
+  if (isSeller) {
+    actionsDiv.innerHTML = `
+      <a href="/manage.html" class="profile-action-btn primary">Manage Listings</a>
+      <a href="/manage-orders.html" class="profile-action-btn secondary">Manage Orders</a>
+      <a href="/sell.html" class="profile-action-btn secondary">Sell an Item</a>
+      ${currentUser.isAdmin ? '<a href="/admin.html" class="profile-action-btn secondary" style="color:var(--search);font-weight:700;">Admin Console</a>' : ''}
+    `;
+
+    // Fetch and display active order alerts for seller
+    const token = localStorage.getItem('auth_token');
+    if (window.__sellerOrderAlertCount !== undefined && window.__sellerOrderAlertCount > 0) {
+      window.renderProfileOrderAlerts(window.__sellerOrderAlertCount);
+    }
+    fetchProfileOrderAlerts(token);
+  } else {
+    actionsDiv.innerHTML = `
+      <a href="/buyer-orders.html" class="profile-action-btn primary">Manage/Track Orders</a>
+      <a href="/cart.html" class="profile-action-btn secondary">Cart</a>
+      ${currentUser.isAdmin ? '<a href="/admin.html" class="profile-action-btn secondary" style="color:var(--search);font-weight:700;">Admin Console</a>' : ''}
+    `;
+  }
+}
+
+async function fetchProfileOrderAlerts(token) {
+  if (!token) return;
+  try {
+    const res = await fetch('/api/orders', {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const orders = Array.isArray(data.orders) ? data.orders : [];
+    const newOrders = orders.filter(o => {
+      const s = String(o.status || '').toLowerCase();
+      return !s.includes('deliver') && !s.includes('cancel') && !s.includes('complet');
+    });
+    const count = newOrders.length;
+    window.__sellerOrderAlertCount = count;
+    window.renderProfileOrderAlerts(count);
+  } catch (err) {}
+}
+
+window.renderProfileOrderAlerts = function(count) {
+  if (!currentUser || currentUser.accountType === 'buyer') return;
+  const displayVal = count > 99 ? '99+' : String(count);
+
+  // 1. Large Avatar Alert Badge
+  const avatar = document.getElementById('profile-avatar');
+  if (avatar) {
+    let aBadge = avatar.querySelector('.profile-avatar-alert-badge');
+    if (count > 0) {
+      if (!aBadge) {
+        aBadge = document.createElement('span');
+        aBadge.className = 'profile-avatar-alert-badge';
+        avatar.appendChild(aBadge);
+      }
+      aBadge.textContent = displayVal;
+      aBadge.title = `${count} new order${count > 1 ? 's' : ''}!`;
+    } else if (aBadge) {
+      aBadge.remove();
+    }
+  }
+
+  // 2. Tag in profile badges
+  const badgesDiv = document.getElementById('profile-badges');
+  if (badgesDiv) {
+    let alertTag = badgesDiv.querySelector('.profile-order-alert-tag');
+    if (count > 0) {
+      if (!alertTag) {
+        alertTag = document.createElement('span');
+        alertTag.className = 'profile-order-alert-tag';
+        badgesDiv.appendChild(alertTag);
+      }
+      alertTag.innerHTML = `<span class="badge-dot-alert"></span> ${displayVal} New Order${count > 1 ? 's' : ''}`;
+    } else if (alertTag) {
+      alertTag.remove();
+    }
+  }
+
+  // 3. Alert Banner above profile form
+  let banner = document.getElementById('profile-seller-order-banner');
+  if (count > 0) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'profile-seller-order-banner';
+      banner.className = 'profile-order-alert-banner';
+      const form = document.getElementById('profile-form');
+      if (form && form.parentNode) {
+        form.parentNode.insertBefore(banner, form);
+      }
+    }
+    banner.innerHTML = `
+      <div class="alert-banner-left">
+        <div class="alert-count-icon">${displayVal}</div>
+        <div>
+          <div class="alert-title">You have ${count} new order${count > 1 ? 's' : ''} for your listings!</div>
+          <div class="alert-subtitle">Buyers have placed orders for your items. Fulfill and dispatch them now.</div>
+        </div>
+      </div>
+      <a href="/manage-orders.html" class="alert-btn">Manage Orders &rarr;</a>
+    `;
+    banner.style.display = 'flex';
+  } else if (banner) {
+    banner.style.display = 'none';
+  }
+
+  // 4. Quick Action Button "Manage Orders"
+  const actionsGrid = document.getElementById('profile-actions-grid');
+  if (actionsGrid) {
+    const ordersBtn = actionsGrid.querySelector('a[href*="manage-orders.html"]');
+    if (ordersBtn) {
+      let btnBadge = ordersBtn.querySelector('.profile-btn-order-alert-badge');
+      if (count > 0) {
+        if (!btnBadge) {
+          btnBadge = document.createElement('span');
+          btnBadge.className = 'profile-btn-order-alert-badge';
+          ordersBtn.appendChild(btnBadge);
+        }
+        btnBadge.textContent = displayVal;
+      } else if (btnBadge) {
+        btnBadge.remove();
+      }
+    }
+  }
+};
+
+// GPS Fetch for Profile
+async function fetchProfileGPS(type) {
+  if (!navigator.geolocation) {
+    showToast('Geolocation not supported');
+    return;
+  }
+  showToast('Fetching GPS coordinates…');
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    try {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+      let full = '';
+      let shortLoc = '';
+      if (res.ok) {
+        const data = await res.json();
+        full = data.display_name || '';
+        const addr = data.address || {};
+        shortLoc = [addr.suburb || addr.city || '', addr.town || addr.county || '', 'Ghana'].filter(Boolean).join(', ');
+      }
+      if (!shortLoc) shortLoc = `Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
+      if (!full) full = `GPS: (${lat.toFixed(6)}, ${lon.toFixed(6)})`;
+
+      if (type === 'seller') {
+        document.getElementById('prof-store-location').value = shortLoc;
+        document.getElementById('prof-seller-gps-address').value = full;
+        const b = document.getElementById('prof-seller-gps-badge');
+        b.style.display = 'flex';
+        b.innerHTML = `<div><strong>GPS:</strong> ${escapeHTML(full)}</div>`;
+      } else {
+        document.getElementById('prof-buyer-location').value = shortLoc;
+        document.getElementById('prof-buyer-gps-address').value = full;
+        const b = document.getElementById('prof-buyer-gps-badge');
+        b.style.display = 'flex';
+        b.innerHTML = `<div><strong>GPS:</strong> ${escapeHTML(full)}</div>`;
+      }
+      showToast('GPS location updated!');
+    } catch (err) {
+      showToast('Could not fetch address details');
+    }
+  }, (err) => {
+    showToast('Location access denied');
+  }, { timeout: 10000, enableHighAccuracy: true });
+}
+
+// Profile Form Submit
+document.getElementById('profile-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('btn-save-profile');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const token = localStorage.getItem('auth_token');
+  const isSeller = currentUser.accountType !== 'buyer';
+
+  const payload = {
+    phone: document.getElementById('prof-phone').value.trim()
+  };
+
+  if (isSeller) {
+    payload.storeName = document.getElementById('prof-store-name').value.trim();
+    payload.storeLocation = document.getElementById('prof-store-location').value.trim();
+    payload.storeGpsAddress = document.getElementById('prof-seller-gps-address').value.trim();
+  } else {
+    payload.name = document.getElementById('prof-buyer-name').value.trim();
+    payload.location = document.getElementById('prof-buyer-location').value.trim();
+    payload.gpsAddress = document.getElementById('prof-buyer-gps-address').value.trim();
+  }
+
+  try {
+    const res = await fetch('/api/user/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.requiresPhoneVerification) {
+        showToast(data.error || 'Please verify your new phone number');
+        openProfileOtpModal(data.phonePendingVerification || payload.phone);
+      } else {
+        showToast(data.error || 'Failed to update profile');
+      }
+      btn.disabled = false;
+      btn.textContent = 'Save Changes';
+      return;
+    }
+    currentUser = data.user;
+    localStorage.setItem('auth_user', JSON.stringify(currentUser));
+    updateAuthUI();
+    renderProfile();
+    showToast('Profile updated successfully');
+  } catch (err) {
+    showToast('Error saving profile');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+  }
+});
+
+let activeVerificationPhone = '';
+
+// Profile OTP Modal Functions
+function openProfileOtpModal(overridePhone) {
+  const phoneInputVal = document.getElementById('prof-phone').value.trim();
+  const phone = overridePhone || phoneInputVal || (currentUser && currentUser.phone) || '';
+  if (!phone) {
+    showToast('Please enter your phone number first');
+    document.getElementById('prof-phone').focus();
+    return;
+  }
+  activeVerificationPhone = phone;
+  document.getElementById('prof-otp-phone-display').textContent = phone;
+  document.getElementById('profile-otp-modal').style.display = 'flex';
+  document.getElementById('prof-otp-step-code').style.display = '';
+  document.getElementById('prof-otp-step-success').style.display = 'none';
+  document.getElementById('prof-otp-code').value = '';
+  document.getElementById('prof-otp-code-error').textContent = '';
+  document.getElementById('prof-otp-code').focus();
+
+  sendProfileOtp(phone);
+}
+
+function closeProfileOtpModal() {
+  document.getElementById('profile-otp-modal').style.display = 'none';
+  clearInterval(profileResendTimer);
+}
+
+async function sendProfileOtp(phone) {
+  const devHint = document.getElementById('prof-otp-dev-hint');
+  devHint.style.display = 'none';
+
+  const token = localStorage.getItem('auth_token');
+  const res = await fetch('/api/send-otp', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify({ phone })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById('prof-otp-code-error').textContent = data.error || 'Failed to send OTP';
+    return;
+  }
+  showToast('Verification code sent');
+  if (data.devCode) {
+    devHint.style.display = 'block';
+    devHint.textContent = `[Dev Mode Code: ${data.devCode}]`;
+  }
+  startProfileResendCooldown(60, phone);
+}
+
+function startProfileResendCooldown(sec, phone) {
+  const div = document.getElementById('prof-otp-resend');
+  clearInterval(profileResendTimer);
+  let rem = sec;
+  div.innerHTML = `Resend code in <strong>${rem}s</strong>`;
+  profileResendTimer = setInterval(() => {
+    rem--;
+    if (rem <= 0) {
+      clearInterval(profileResendTimer);
+      div.innerHTML = `<a id="prof-btn-resend" style="color:var(--paper-raised);font-weight:700;cursor:pointer;text-decoration:underline;">Resend verification code</a>`;
+      document.getElementById('prof-btn-resend')?.addEventListener('click', () => sendProfileOtp(phone));
+    } else {
+      div.innerHTML = `Resend code in <strong>${rem}s</strong>`;
+    }
+  }, 1000);
+}
+
+async function verifyProfileOtp() {
+  const code = document.getElementById('prof-otp-code').value.trim();
+  const phone = activeVerificationPhone || document.getElementById('prof-phone').value.trim() || (currentUser && currentUser.phone);
+  const btn = document.getElementById('prof-otp-verify-btn');
+  const errDiv = document.getElementById('prof-otp-code-error');
+  errDiv.textContent = '';
+
+  if (!code || code.length !== 6) {
+    errDiv.textContent = 'Please enter the 6-digit code';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+
+  const token = localStorage.getItem('auth_token');
+  const res = await fetch('/api/verify-otp', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    body: JSON.stringify({ phone, code })
+  });
+  const data = await res.json();
+  btn.disabled = false;
+  btn.textContent = 'Verify Code';
+
+  if (!res.ok) {
+    errDiv.textContent = data.error || 'Verification failed';
+    return;
+  }
+
+  currentUser.phoneVerified = true;
+  if (data.user) Object.assign(currentUser, data.user);
+  localStorage.setItem('auth_user', JSON.stringify(currentUser));
+  updateAuthUI();
+
+  document.getElementById('prof-otp-step-code').style.display = 'none';
+  document.getElementById('prof-otp-step-success').style.display = '';
+}
+
+// ---- Payments & Escrow section -------------------------------------------------------------
+// Fed by GET /api/my-payments. That endpoint is being added server-side, so a 404/5xx/network
+// failure must degrade to a quiet "unavailable" note rather than an error or a stuck spinner.
+
+function paymentStatusText(ps, es) {
+  const p = String(ps || '').toLowerCase();
+  const e = String(es || '').toLowerCase();
+  if (p === 'paid' && e === 'held') return { text: 'Paid · Held in escrow', color: '#065f46' };
+  if (p === 'paid' && e === 'released') return { text: 'Paid · Released', color: '#166534' };
+  if (p === 'paid' && e === 'refunded') return { text: 'Paid · Refunded', color: '#991b1b' };
+  if (p === 'pending') return { text: 'Awaiting payment', color: '#92400e' };
+  if (p === 'expired') return { text: 'Payment expired', color: '#475569' };
+  if (p === 'unverified') return { text: 'Payment unverified', color: '#92400e' };
+  return { text: 'Unknown', color: '#475569' };
+}
+
+function moneyStat(amount, label, bg, color) {
+  return `<div style="background:${bg};border-radius:12px;padding:12px 14px;">
+    <div style="font-size:12.3px;color:${color};font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">${escapeHTML(label)}</div>
+    <div style="font-size:20.2px;font-weight:800;color:${color};font-family:var(--font-numeric);font-variant-numeric:tabular-nums;margin-top:2px;">${formatGHs(Number(amount) || 0)}</div>
+  </div>`;
+}
+
+function renderTxList(orders, title) {
+  if (!orders.length) return '';
+  const rows = orders.map(o => {
+    const st = paymentStatusText(o.paymentStatus, o.escrowStatus);
+    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid #f1f5f9;flex-wrap:wrap;">
+      <div style="min-width:0;">
+        <div style="font-weight:700;color:var(--ink);font-size:14.6px;font-family:var(--font-numeric);font-variant-numeric:tabular-nums;">#${escapeHTML(o.id)}</div>
+        <div style="font-size:12.3px;color:var(--ink-lighter);margin-top:2px;">${escapeHTML(formatDate(o.paidAt || o.createdAt) || '')} · <span style="color:${st.color};font-weight:700;">${escapeHTML(st.text)}</span></div>
+        ${o.paymentReference ? `<div style="font-size:11.4px;color:var(--ink-lighter);user-select:all;word-break:break-all;">${escapeHTML(o.paymentReference)}</div>` : ''}
+      </div>
+      <div style="font-weight:800;color:#047857;font-family:var(--font-numeric);font-variant-numeric:tabular-nums;font-size:15.7px;white-space:nowrap;">${formatGHs(Number(o.total) || 0)}</div>
+    </div>`;
+  }).join('');
+  return `<div style="font-size:13.4px;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:0.4px;margin:0 0 4px;">${escapeHTML(title)}</div>
+    <div style="margin-bottom:18px;">${rows}</div>`;
+}
+
+function renderPayments(data) {
+  const body = document.getElementById('payments-body');
+  if (!body) return;
+  const orders = Array.isArray(data && data.orders) ? data.orders : [];
+  const sellerOrders = Array.isArray(data && data.sellerOrders) ? data.sellerOrders : [];
+  const summary = (data && data.summary) || {};
+
+  const stats = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;">
+      ${moneyStat(summary.paidTotal, 'Paid', '#eff6ff', '#1e40af')}
+      ${moneyStat(summary.heldTotal, 'Held in escrow', '#ecfdf5', '#065f46')}
+      ${moneyStat(summary.releasedTotal, 'Released', '#f0fdf4', '#166534')}
+      ${moneyStat(summary.pendingTotal, 'Pending', '#fffbeb', '#92400e')}
+    </div>`;
+
+  const buyList = renderTxList(orders, 'Recent transactions');
+  const sellList = sellerOrders.length ? renderTxList(sellerOrders, 'Sales & payouts') : '';
+  const empty = (!orders.length && !sellerOrders.length)
+    ? `<p style="color:var(--ink-lighter);font-size:14.6px;margin:0;">No payment activity yet.</p>`
+    : '';
+
+  body.innerHTML = stats + buyList + sellList + empty;
+}
+
+// Quiet, non-alarming fallback that mirrors renderProfileError()'s tone.
+function renderPaymentsUnavailable() {
+  const body = document.getElementById('payments-body');
+  if (!body) return;
+  body.innerHTML = `<p style="color:var(--ink-lighter);font-size:14.6px;margin:0;">Payments history is unavailable right now. Please check back later.</p>`;
+}
+
+async function loadPayments() {
+  const token = localStorage.getItem('auth_token');
+  if (!token) return; // loadProfile() handles the unauthenticated redirect
+
+  try {
+    const res = await fetch('/api/my-payments', { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) { renderPaymentsUnavailable(); return; }
+    const data = await res.json();
+    if (!data || data.ok === false) { renderPaymentsUnavailable(); return; }
+    renderPayments(data);
+  } catch (err) {
+    renderPaymentsUnavailable();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadProfile();
+  loadPayments();
+});
+</script>
+</body>
+</html>

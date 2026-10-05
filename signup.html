@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Create an account on RichStore to start buying or selling.">
+<title>Sign up — RichStore</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="site">
+  <div class="site-inner">
+    <a href="index.html" class="logo">RichStore<span class="dot">.</span></a>
+    <form class="searchbar" onsubmit="event.preventDefault(); location.href='index.html?search='+encodeURIComponent(this.q.value)">
+      <input type="text" name="q" placeholder="Search for anything…" autocomplete="off" aria-label="Search listings">
+      <button type="submit">Search</button>
+    </form>
+    <div class="nav-actions">
+      <a href="cart.html" class="cart-link" aria-label="Shopping cart">🛒 <span class="cart-count" id="cart-count">0</span></a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" style="padding-top:32px;display:flex;justify-content:center;">
+  <div class="form-card" style="max-width:560px;">
+    <h1 class="section-title" style="margin-bottom:6px;text-align:center;">Create an Account</h1>
+    <p style="text-align:center;color:var(--ink-lighter);font-size:15.7px;margin-bottom:20px;">
+      Choose your account type to get started on RichStore
+    </p>
+
+    <!-- Account Type Tabs -->
+    <div class="account-type-tabs" role="tablist">
+      <button type="button" class="account-type-tab active" id="tab-seller" role="tab" aria-selected="true" onclick="switchAccountType('seller')">
+        <span>I want to Sell</span>
+      </button>
+      <button type="button" class="account-type-tab" id="tab-buyer" role="tab" aria-selected="false" onclick="switchAccountType('buyer')">
+        <span>I want to Buy</span>
+      </button>
+    </div>
+
+    <!-- Signup Form -->
+    <form id="signup-form">
+      <input type="hidden" id="account-type" value="seller">
+
+      <!-- SELLER FIELDS -->
+      <div id="seller-fields">
+        <div class="field">
+          <label for="store-name">Store Name <span style="color:var(--tag-red);font-weight:700;">*</span></label>
+          <input id="store-name" type="text" placeholder="e.g. Rich Fashion Store" autocomplete="organization">
+        </div>
+
+        <div class="field">
+          <label for="seller-username">Username <span style="color:var(--tag-red);font-weight:700;">*</span> <span style="font-weight:400;color:var(--ink-lighter);font-size:13.4px;">(for login, letters/numbers only)</span></label>
+          <input id="seller-username" type="text" placeholder="e.g. richfashion" autocomplete="username">
+        </div>
+
+        <div class="field">
+          <label for="seller-password">Password <span style="color:var(--tag-red);font-weight:700;">*</span> <span style="font-weight:400;color:var(--ink-lighter);font-size:13.4px;">(min 8 characters)</span></label>
+          <input id="seller-password" type="password" placeholder="••••••••" autocomplete="new-password" minlength="8">
+        </div>
+
+        <div class="field">
+          <label for="seller-password-confirm">Confirm Password <span style="color:var(--tag-red);font-weight:700;">*</span></label>
+          <input id="seller-password-confirm" type="password" placeholder="••••••••" autocomplete="new-password" minlength="8">
+        </div>
+
+        <div class="field">
+          <label for="seller-phone">Phone Number <span style="color:var(--tag-red);font-weight:700;">*</span></label>
+          <input id="seller-phone" type="tel" placeholder="e.g. 050 123 4567 or 024 123 4567" autocomplete="tel">
+          <p class="hint" style="font-size:13.4px;color:var(--ink-lighter);margin-top:4px;">We'll send a verification code to this phone number.</p>
+        </div>
+
+        <div class="field">
+          <label for="store-location">Store Location <span style="color:var(--tag-red);font-weight:700;">*</span></label>
+          <div class="gps-input-wrapper">
+            <input id="store-location" type="text" placeholder="e.g. Madina Market, Accra" autocomplete="street-address">
+            <button type="button" class="gps-fetch-btn" id="btn-seller-gps" onclick="fetchGPS('seller')">
+              Fetch GPS
+            </button>
+          </div>
+          <div id="seller-gps-badge" class="gps-address-badge" style="display:none;"></div>
+          <input type="hidden" id="seller-gps-address" value="">
+        </div>
+      </div>
+
+      <!-- BUYER FIELDS -->
+      <div id="buyer-fields" style="display:none;">
+        <div class="field">
+          <label for="buyer-name">Full Name <span style="color:var(--tag-red);font-weight:700;">*</span></label>
+          <input id="buyer-name" type="text" placeholder="e.g. Emmanuel Senyo" autocomplete="name">
+        </div>
+
+        <div class="field">
+          <label for="buyer-username">Username <span style="color:var(--tag-red);font-weight:700;">*</span> <span style="font-weight:400;color:var(--ink-lighter);font-size:13.4px;">(for login, letters/numbers only)</span></label>
+          <input id="buyer-username" type="text" placeholder="e.g. emmanuels" autocomplete="username">
+        </div>
+
+        <div class="field">
+          <label for="buyer-password">Password <span style="color:var(--tag-red);font-weight:700;">*</span> <span style="font-weight:400;color:var(--ink-lighter);font-size:13.4px;">(min 8 characters)</span></label>
+          <input id="buyer-password" type="password" placeholder="••••••••" autocomplete="new-password" minlength="8">
+        </div>
+
+        <div class="field">
+          <label for="buyer-password-confirm">Confirm Password <span style="color:var(--tag-red);font-weight:700;">*</span></label>
+          <input id="buyer-password-confirm" type="password" placeholder="••••••••" autocomplete="new-password" minlength="8">
+        </div>
+
+        <div class="field">
+          <label for="buyer-phone">Phone Number <span style="color:var(--tag-red);font-weight:700;">*</span></label>
+          <input id="buyer-phone" type="tel" placeholder="e.g. 055 123 4567 or 050 123 4567" autocomplete="tel">
+          <p class="hint" style="font-size:13.4px;color:var(--ink-lighter);margin-top:4px;">Used for order delivery confirmations and OTP verification.</p>
+        </div>
+
+        <div class="field">
+          <label for="buyer-location">Delivery Location <span style="color:var(--tag-red);font-weight:700;">*</span></label>
+          <div class="gps-input-wrapper">
+            <input id="buyer-location" type="text" placeholder="e.g. East Legon, Accra" autocomplete="street-address">
+            <button type="button" class="gps-fetch-btn" id="btn-buyer-gps" onclick="fetchGPS('buyer')">
+              Fetch GPS
+            </button>
+          </div>
+          <div id="buyer-gps-badge" class="gps-address-badge" style="display:none;"></div>
+          <input type="hidden" id="buyer-gps-address" value="">
+        </div>
+      </div>
+
+      <button class="btn primary" type="submit" id="signup-btn" style="width:100%;margin-top:10px;padding:14px;font-size:17.9px;">
+        Create Seller Account
+      </button>
+
+      <p style="margin-top:16px;text-align:center;font-size:15.7px;">
+        Already have an account? <a href="login.html" style="color:var(--paper-raised);font-weight:700;">Login here</a>
+      </p>
+    </form>
+  </div>
+</main>
+
+<!-- OTP Phone Verification Modal (Step 2 of Signup) -->
+<div class="otp-overlay" id="otp-modal" style="display:none;">
+  <div class="otp-card">
+    <button type="button" class="otp-close-btn" id="otp-close-btn" aria-label="Close verification modal" title="Skip for now">&times;</button>
+    
+    <!-- Enter verification code -->
+    <div id="otp-step-code">
+      <h2>Phone Verification</h2>
+      <p>We sent a 6-digit verification code to <span class="otp-phone-display" id="otp-phone-display"></span></p>
+      <div class="field">
+        <input type="text" id="otp-code" class="otp-code-input" maxlength="6" placeholder="000000" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+      </div>
+      <button class="btn primary" id="otp-verify-btn" type="button" style="width:100%;padding:14px;">Verify & Finish</button>
+      <div class="otp-timer" id="otp-dev-hint" style="display:none;color:#0000CD;font-weight:700;margin-top:8px;"></div>
+      <div class="otp-timer" id="otp-resend"></div>
+      <div class="otp-timer" id="otp-code-error"></div>
+      <p style="margin-top:16px;font-size:14.6px;">
+        <a href="#" id="otp-skip-link" style="color:var(--ink-lighter);text-decoration:underline;">Skip verification for now</a>
+      </p>
+    </div>
+
+    <!-- Success state -->
+    <div id="otp-step-success" style="display:none;">
+      <div class="otp-success">✓</div>
+      <h2>Phone Verified!</h2>
+      <p id="otp-success-msg">Your account is fully verified. Redirecting to your dashboard…</p>
+      <button class="btn primary" id="otp-continue-btn" type="button" style="width:100%;padding:14px;">Continue</button>
+    </div>
+  </div>
+</div>
+
+<footer class="site"><em>RichStore. Copyright © 2026</em></footer>
+
+<script src="js/cart.js"></script>
+<script>
+let currentAccountType = 'seller';
+let pendingPhone = '';
+let resendTimer = null;
+
+function switchAccountType(type) {
+  currentAccountType = type;
+  document.getElementById('account-type').value = type;
+
+  const tabSeller = document.getElementById('tab-seller');
+  const tabBuyer = document.getElementById('tab-buyer');
+  const sellerFields = document.getElementById('seller-fields');
+  const buyerFields = document.getElementById('buyer-fields');
+  const submitBtn = document.getElementById('signup-btn');
+
+  if (type === 'seller') {
+    tabSeller.classList.add('active');
+    tabSeller.setAttribute('aria-selected', 'true');
+    tabBuyer.classList.remove('active');
+    tabBuyer.setAttribute('aria-selected', 'false');
+    sellerFields.style.display = '';
+    buyerFields.style.display = 'none';
+    submitBtn.textContent = 'Create Seller Account';
+  } else {
+    tabBuyer.classList.add('active');
+    tabBuyer.setAttribute('aria-selected', 'true');
+    tabSeller.classList.remove('active');
+    tabSeller.setAttribute('aria-selected', 'false');
+    buyerFields.style.display = '';
+    sellerFields.style.display = 'none';
+    submitBtn.textContent = 'Create Buyer Account';
+  }
+}
+
+// GPS Address Fetch using Browser Geolocation + OpenStreetMap Reverse Geocoding
+async function fetchGPS(target) {
+  const btn = document.getElementById(target === 'seller' ? 'btn-seller-gps' : 'btn-buyer-gps');
+  const locInput = document.getElementById(target === 'seller' ? 'store-location' : 'buyer-location');
+  const gpsBadge = document.getElementById(target === 'seller' ? 'seller-gps-badge' : 'buyer-gps-badge');
+  const gpsHidden = document.getElementById(target === 'seller' ? 'seller-gps-address' : 'buyer-gps-address');
+
+  if (!navigator.geolocation) {
+    showToast('Geolocation is not supported by your browser');
+    return;
+  }
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Fetching…';
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    try {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      
+      // Reverse geocode via OpenStreetMap Nominatim API
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      let fullAddress = '';
+      let shortLocation = '';
+
+      if (res.ok) {
+        const data = await res.json();
+        fullAddress = data.display_name || '';
+        const addr = data.address || {};
+        shortLocation = [
+          addr.suburb || addr.neighbourhood || addr.quarter || addr.city_district || addr.town || addr.city || '',
+          addr.city || addr.town || addr.county || '',
+          addr.country || 'Ghana'
+        ].filter(Boolean).join(', ');
+      }
+
+      if (!shortLocation) {
+        shortLocation = `Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
+      }
+      if (!fullAddress) {
+        fullAddress = `GPS Coordinates: (${lat.toFixed(6)}, ${lon.toFixed(6)})`;
+      }
+
+      locInput.value = shortLocation;
+      gpsHidden.value = fullAddress;
+      gpsBadge.style.display = 'flex';
+      gpsBadge.className = 'gps-address-badge active';
+      gpsBadge.innerHTML = `<div><strong>GPS Address:</strong> ${escapeHTML(fullAddress)}</div>`;
+      showToast('GPS location retrieved!');
+    } catch (err) {
+      console.warn('GPS geocode failed:', err);
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const coordStr = `Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`;
+      locInput.value = coordStr;
+      gpsHidden.value = coordStr;
+      gpsBadge.style.display = 'flex';
+      gpsBadge.innerHTML = `<div><strong>GPS Coordinates:</strong> ${coordStr}</div>`;
+      showToast('Coordinates retrieved');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }, (err) => {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    let msg = 'Could not access location';
+    if (err.code === 1) msg = 'Location access denied. Please type your location manually.';
+    else if (err.code === 2) msg = 'Location unavailable. Please type your location manually.';
+    showToast(msg);
+  }, { timeout: 10000, enableHighAccuracy: true });
+}
+
+// Form Submission Handler
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('signup-btn');
+  const type = currentAccountType;
+
+  let payload = { accountType: type };
+
+  if (type === 'seller') {
+    const storeName = document.getElementById('store-name').value.trim();
+    const username = document.getElementById('seller-username').value.trim();
+    const password = document.getElementById('seller-password').value;
+    const passwordConfirm = document.getElementById('seller-password-confirm').value;
+    const phone = document.getElementById('seller-phone').value.trim();
+    const storeLocation = document.getElementById('store-location').value.trim();
+    const storeGpsAddress = document.getElementById('seller-gps-address').value.trim();
+
+    if (!storeName) return showToast('Please enter your store name');
+    if (!username) return showToast('Please enter a username');
+    if (password.length < 8) return showToast('Password must be at least 8 characters');
+    if (password !== passwordConfirm) return showToast('Passwords do not match');
+    if (!phone) return showToast('Please enter your phone number');
+    if (!storeLocation) return showToast('Please enter your store location or fetch GPS');
+
+    payload.storeName = storeName;
+    payload.username = username;
+    payload.password = password;
+    payload.phone = phone;
+    payload.storeLocation = storeLocation;
+    payload.storeGpsAddress = storeGpsAddress;
+    pendingPhone = phone;
+  } else {
+    const name = document.getElementById('buyer-name').value.trim();
+    const username = document.getElementById('buyer-username').value.trim();
+    const password = document.getElementById('buyer-password').value;
+    const passwordConfirm = document.getElementById('buyer-password-confirm').value;
+    const phone = document.getElementById('buyer-phone').value.trim();
+    const location = document.getElementById('buyer-location').value.trim();
+    const gpsAddress = document.getElementById('buyer-gps-address').value.trim();
+
+    if (!name) return showToast('Please enter your full name');
+    if (!username) return showToast('Please enter a username');
+    if (password.length < 8) return showToast('Password must be at least 8 characters');
+    if (password !== passwordConfirm) return showToast('Passwords do not match');
+    if (!phone) return showToast('Please enter your phone number');
+    if (!location) return showToast('Please enter your delivery location or fetch GPS');
+
+    payload.name = name;
+    payload.username = username;
+    payload.password = password;
+    payload.phone = phone;
+    payload.location = location;
+    payload.gpsAddress = gpsAddress;
+    pendingPhone = phone;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating account…';
+
+  const { ok, data } = await api.post('/api/signup', payload);
+  if (!ok) {
+    showToast(data.error || 'Sign up failed');
+    btn.disabled = false;
+    btn.textContent = type === 'seller' ? 'Create Seller Account' : 'Create Buyer Account';
+    return;
+  }
+
+  // Account created successfully!
+  localStorage.setItem('auth_token', data.token);
+  localStorage.setItem('auth_user', JSON.stringify(data.user));
+  updateAuthUI();
+
+  // Launch OTP Verification Modal
+  launchOtpVerification(data.user.phone || pendingPhone);
+});
+
+// OTP Verification Modal Logic
+function launchOtpVerification(phone) {
+  pendingPhone = phone;
+  document.getElementById('otp-phone-display').textContent = phone;
+  document.getElementById('otp-modal').style.display = 'flex';
+  document.getElementById('otp-step-code').style.display = '';
+  document.getElementById('otp-step-success').style.display = 'none';
+  document.getElementById('otp-code').value = '';
+  document.getElementById('otp-code-error').textContent = '';
+  document.getElementById('otp-code').focus();
+
+  // Automatically request OTP
+  sendOtpCode(phone);
+}
+
+async function sendOtpCode(phone) {
+  const devHint = document.getElementById('otp-dev-hint');
+  devHint.style.display = 'none';
+
+  const { ok, data } = await api.post('/api/send-otp', { phone });
+  if (!ok) {
+    document.getElementById('otp-code-error').textContent = data.error || 'Failed to send code';
+    return;
+  }
+
+  showToast('Verification code sent to ' + (data.phone || phone));
+  if (data.devCode) {
+    devHint.style.display = 'block';
+    devHint.textContent = `[Dev Mode Code: ${data.devCode}]`;
+  }
+  startResendCooldown(60);
+}
+
+function startResendCooldown(seconds) {
+  const resendDiv = document.getElementById('otp-resend');
+  clearInterval(resendTimer);
+  let remaining = seconds;
+  resendDiv.innerHTML = `Resend code in <strong>${remaining}s</strong>`;
+
+  resendTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(resendTimer);
+      resendDiv.innerHTML = `<a id="btn-resend-now" style="color:var(--paper-raised);font-weight:700;cursor:pointer;text-decoration:underline;">Resend verification code</a>`;
+      document.getElementById('btn-resend-now')?.addEventListener('click', () => {
+        sendOtpCode(pendingPhone);
+      });
+    } else {
+      resendDiv.innerHTML = `Resend code in <strong>${remaining}s</strong>`;
+    }
+  }, 1000);
+}
+
+// Verify OTP Button
+document.getElementById('otp-verify-btn').addEventListener('click', async () => {
+  const code = document.getElementById('otp-code').value.trim();
+  const errDiv = document.getElementById('otp-code-error');
+  const verifyBtn = document.getElementById('otp-verify-btn');
+  errDiv.textContent = '';
+
+  if (!code || code.length !== 6) {
+    errDiv.textContent = 'Please enter the 6-digit code';
+    return;
+  }
+
+  verifyBtn.disabled = true;
+  verifyBtn.textContent = 'Verifying…';
+
+  const { ok, data } = await api.post('/api/verify-otp', { phone: pendingPhone, code });
+  if (!ok) {
+    errDiv.textContent = data.error || 'Invalid code';
+    verifyBtn.disabled = false;
+    verifyBtn.textContent = 'Verify & Finish';
+    return;
+  }
+
+  // Verification success!
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}');
+  user.phoneVerified = true;
+  if (data.user) Object.assign(user, data.user);
+  localStorage.setItem('auth_user', JSON.stringify(user));
+  updateAuthUI();
+
+  document.getElementById('otp-step-code').style.display = 'none';
+  document.getElementById('otp-step-success').style.display = '';
+
+  setTimeout(() => {
+    finishRedirect();
+  }, 1800);
+});
+
+function finishRedirect() {
+  const user = JSON.parse(localStorage.getItem('auth_user') || '{}');
+  if (user.accountType === 'seller') {
+    location.href = '/manage.html';
+  } else {
+    location.href = '/';
+  }
+}
+
+document.getElementById('otp-continue-btn').addEventListener('click', finishRedirect);
+document.getElementById('otp-close-btn').addEventListener('click', () => {
+  showToast('You can verify your phone anytime in your User Profile');
+  finishRedirect();
+});
+document.getElementById('otp-skip-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  showToast('You can verify your phone anytime in your User Profile');
+  finishRedirect();
+});
+</script>
+</body>
+</html>

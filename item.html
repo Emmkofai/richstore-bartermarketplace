@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="View item details on RichStore.">
+<title>Item — RichStore</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="site-inner">
+    <a href="index.html" class="logo">RichStore<span class="dot">.</span></a>
+    <form class="searchbar" onsubmit="event.preventDefault(); location.href='index.html?search='+encodeURIComponent(this.q.value)">
+      <input type="text" name="q" placeholder="Search for anything…" autocomplete="off" aria-label="Search listings">
+      <button type="submit">Search</button>
+    </form>
+    <div class="nav-actions">
+      <a href="sell.html" class="btn primary btn-sell">Sell an item</a>
+      <a href="cart.html" class="cart-link" aria-label="Shopping cart">🛒 <span class="cart-count" id="cart-count">0</span></a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="content" style="padding-top:24px;">
+  <p>Loading…</p>
+</main>
+
+<footer class="site"><em>RichStore. Copyright © 2026</em></footer>
+
+<script src="js/cart.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get("id");
+
+async function load() {
+  const content = document.getElementById("content");
+  if (!id) {
+    content.innerHTML = "<p>No item specified. <a href='index.html'>Go back</a>.</p>";
+    return;
+  }
+  const res = await fetch("/api/listings/" + id);
+  if (!res.ok) {
+    content.innerHTML = "<p>Listing not found. <a href='index.html'>Go back</a>.</p>";
+    return;
+  }
+  const { listing: item } = await res.json();
+
+  // Update page title
+  document.title = escapeHTML(item.title) + ' — RichStore';
+
+  function getMediaSrc(emoji) {
+    if (!emoji) return '';
+    if (typeof emoji === 'string' && emoji.includes('<img')) {
+      const m = emoji.match(/src=["']([^"']+)["']/i);
+      if (m) return m[1];
+    }
+    if (typeof emoji === 'string' && (
+      emoji.startsWith('/') ||
+      emoji.startsWith('http') ||
+      emoji.startsWith('data:') ||
+      emoji.includes('/') ||
+      /\.(jpg|jpeg|png|gif|webp|svg|avif)$/i.test(emoji)
+    )) {
+      return emoji;
+    }
+    return '';
+  }
+
+  // Build slides array from images[] + fallback to emoji
+  let slides = [];
+  if (Array.isArray(item.images) && item.images.length > 0) {
+    slides = item.images.map(p => getMediaSrc(p)).filter(Boolean);
+  }
+  if (slides.length === 0) {
+    const mainSrc = getMediaSrc(item.emoji);
+    if (mainSrc) slides = [mainSrc];
+  }
+
+  const hasSlideshow = slides.length > 1;
+  const safeTitle = escapeHTML(item.title);
+
+  let mediaHTML;
+  if (slides.length === 0) {
+    mediaHTML = `<div class="item-media" style="background:${escapeHTML(item.color)}22;">${escapeHTML(item.emoji)}</div>`;
+  } else if (!hasSlideshow) {
+    mediaHTML = `<div class="item-media" style="background:${escapeHTML(item.color)}22;"><img src="${escapeHTML(slides[0])}" alt="${safeTitle}"></div>`;
+  } else {
+    mediaHTML = `
+      <div class="slideshow" id="slideshow" style="background:${escapeHTML(item.color)}22;">
+        <div class="slideshow-track" id="slideshow-track">
+          ${slides.map((src, i) => `
+            <div class="slide ${i === 0 ? 'active' : ''}" data-index="${i}">
+              <img src="${escapeHTML(src)}" alt="${safeTitle} — photo ${i + 1}">
+            </div>`).join('')}
+        </div>
+        <button class="slide-arrow slide-prev" id="slide-prev" aria-label="Previous image">&#10094;</button>
+        <button class="slide-arrow slide-next" id="slide-next" aria-label="Next image">&#10095;</button>
+        <div class="slide-dots" id="slide-dots">
+          ${slides.map((_, i) => `<span class="dot ${i === 0 ? 'active' : ''}" data-index="${i}"></span>`).join('')}
+        </div>
+        <div class="slide-counter" id="slide-counter">1 / ${slides.length}</div>
+      </div>`;
+  }
+
+  const safeDesc = escapeHTML(item.description);
+  const safeSeller = escapeHTML(item.seller);
+  const safePhone = escapeHTML(item.sellerPhone || '');
+  const safeAddress = escapeHTML(item.sellerAddress || item.address || '');
+  const safeCat = escapeHTML(item.category);
+  const safeCond = escapeHTML(item.condition);
+  const isVerified = Boolean(item.sellerPhoneVerified);
+
+  const verifiedBadge = isVerified ? `
+    <span class="phone-verified-tag" title="Verified seller phone number" style="display:inline-flex;align-items:center;gap:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:2px 8px;border-radius:14px;font-size:13.4px;font-weight:700;font-family:var(--font-body);line-height:1.2;box-shadow:0 1px 2px rgba(37,99,235,0.08);vertical-align:middle;">
+      Verified
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="display:inline-block;vertical-align:middle;">
+        <circle cx="12" cy="12" r="10" fill="#2563eb"/>
+        <path d="M7.5 12l3 3 6-6" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>` : '';
+
+  let isSellerUser = false;
+  try {
+    const u = JSON.parse(localStorage.getItem('auth_user') || 'null');
+    if (u && u.accountType === 'seller') isSellerUser = true;
+  } catch (e) {}
+
+  content.innerHTML = `
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="index.html">Home</a> / <a href="index.html?cat=${encodeURIComponent(item.category)}">${safeCat}</a> / ${safeTitle}</nav>
+    <div class="item-layout">
+      ${mediaHTML}
+      <div>
+        <h1 class="item-title">${safeTitle}</h1>
+        <span class="item-condition">${safeCond}</span>
+        <div class="item-price">${formatGHs(item.price)}</div>
+        <p class="item-seller">Sold by <b>${safeSeller}</b></p>
+        ${safeAddress ? `<p class="item-address" style="font-size:15.7px;color:var(--ink-lighter);margin:2px 0 6px;">Location: <b>${safeAddress}</b></p>` : ""}
+        ${item.sellerPhone ? `<p class="item-contact" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:6px 0 10px;"><span>Call: <a href="tel:${safePhone}" style="font-weight:700;color:var(--accent, #0000CD);">${safePhone}</a></span>${verifiedBadge}</p>` : ""}
+        <p class="item-desc">${safeDesc}</p>
+        ${item.sellerPhone ? `
+          <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <a class="btn primary btn-amber" href="tel:${safePhone}" style="display:inline-flex;align-items:center;gap:6px;">Call seller</a>
+            ${isVerified ? `
+              <span style="display:inline-flex;align-items:center;gap:4px;font-size:13.4px;font-weight:600;color:#2563eb;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" fill="#2563eb"/>
+                  <path d="M7.5 12l3 3 6-6" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Verified Phone
+              </span>` : ''}
+          </div>` : ""}
+        <p class="stock-note ${item.stock <= 2 && item.stock > 0 ? 'low' : ''}">
+          ${item.stock > 0 ? item.stock + ' available' : 'Out of stock'}
+        </p>
+        ${isSellerUser ? `
+          <div class="seller-restriction-notice" style="margin-top:16px;padding:14px 18px;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:12px;font-size:15.7px;color:#475569;line-height:1.5;">
+            <strong style="display:block;color:#1E2B23;margin-bottom:4px;font-size:15.7px;">Seller Account</strong>
+            Sellers are not allowed to buy or add items to the cart. Please switch to or create a buyer account to purchase.
+          </div>
+        ` : `
+          <div class="qty-row">
+            <label for="qty" style="font-weight:600;font-size:14.6px;">Qty</label>
+            <input type="number" id="qty" value="1" min="1" ${item.stock === 0 ? 'disabled' : ''}>
+          </div>
+          <div id="stock-alert-box" class="stock-alert" style="display:none;" role="alert"></div>
+          <button class="btn primary btn-amber" id="add-btn" ${item.stock === 0 ? 'disabled' : ''}>
+            ${item.stock === 0 ? 'Out of stock' : 'Add to cart'}
+          </button>
+        `}
+      </div>
+    </div>`;
+
+  // Slideshow logic
+  if (hasSlideshow) {
+    let current = 0;
+    const slideEls = document.querySelectorAll('.slide');
+    const dotEls = document.querySelectorAll('.slide-dots .dot');
+    const counter = document.getElementById('slide-counter');
+
+    function goToSlide(index) {
+      if (index < 0) index = slides.length - 1;
+      if (index >= slides.length) index = 0;
+      slideEls.forEach(s => s.classList.remove('active'));
+      dotEls.forEach(d => d.classList.remove('active'));
+      slideEls[index].classList.add('active');
+      dotEls[index].classList.add('active');
+      counter.textContent = (index + 1) + ' / ' + slides.length;
+      current = index;
+    }
+
+    document.getElementById('slide-prev').addEventListener('click', () => goToSlide(current - 1));
+    document.getElementById('slide-next').addEventListener('click', () => goToSlide(current + 1));
+    dotEls.forEach(dot => {
+      dot.addEventListener('click', () => goToSlide(parseInt(dot.dataset.index, 10)));
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') goToSlide(current - 1);
+      if (e.key === 'ArrowRight') goToSlide(current + 1);
+    });
+
+    // Touch swipe
+    let touchStartX = 0;
+    const slideshow = document.getElementById('slideshow');
+    slideshow.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+    slideshow.addEventListener('touchend', (e) => {
+      const diff = touchStartX - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 50) {
+        if (diff > 0) goToSlide(current + 1);
+        else goToSlide(current - 1);
+      }
+    }, { passive: true });
+  }
+
+  const qtyInput = document.getElementById("qty");
+  const alertBox = document.getElementById("stock-alert-box");
+  const addBtn = document.getElementById("add-btn");
+
+  function validateDemand(showAlert = false) {
+    if (item.stock <= 0) return { valid: false, msg: "This item is out of stock." };
+    const rawVal = qtyInput ? qtyInput.value.trim() : "1";
+    const demanded = parseInt(rawVal, 10);
+    const inCart = Cart.getItemQty ? Cart.getItemQty(item.id) : (parseInt(Cart.read()[item.id], 10) || 0);
+
+    if (isNaN(demanded) || demanded <= 0) {
+      const msg = "Please enter a valid quantity of 1 or more.";
+      if (showAlert && alertBox && qtyInput) {
+        alertBox.style.display = "flex";
+        alertBox.innerHTML = `<span>${escapeHTML(msg)}</span>`;
+        qtyInput.classList.add("error");
+      }
+      return { valid: false, msg };
+    }
+
+    if (demanded > item.stock) {
+      const msg = `The quantity demanded (${demanded}) is not equal to the quantity available (only ${item.stock} available). Please reduce your demand to the stock available.`;
+      if (showAlert && alertBox && qtyInput) {
+        alertBox.style.display = "flex";
+        alertBox.innerHTML = `<span>${escapeHTML(msg)}</span>`;
+        qtyInput.classList.add("error");
+      }
+      return { valid: false, msg };
+    }
+
+    if (inCart + demanded > item.stock) {
+      const remaining = Math.max(0, item.stock - inCart);
+      const msg = remaining > 0
+        ? `The quantity demanded (${demanded}) is not equal to the quantity available (${remaining} remaining, as you already have ${inCart} in your cart). Please reduce your demand to the stock available.`
+        : `You already have all ${item.stock} available in your cart. Please reduce your demand to the stock available.`;
+      if (showAlert && alertBox && qtyInput) {
+        alertBox.style.display = "flex";
+        alertBox.innerHTML = `<span>${escapeHTML(msg)}</span>`;
+        qtyInput.classList.add("error");
+      }
+      return { valid: false, msg };
+    }
+
+    if (alertBox) {
+      alertBox.style.display = "none";
+      alertBox.innerHTML = "";
+    }
+    if (qtyInput) qtyInput.classList.remove("error");
+    return { valid: true, demanded };
+  }
+
+  qtyInput?.addEventListener("input", () => validateDemand(true));
+  qtyInput?.addEventListener("change", () => validateDemand(true));
+
+  addBtn?.addEventListener("click", () => {
+    let currentUser = null;
+    try { currentUser = JSON.parse(localStorage.getItem('auth_user') || 'null'); } catch {}
+    if (currentUser && currentUser.accountType === 'seller') {
+      showToast('Seller accounts cannot buy or add items to cart.');
+      return;
+    }
+
+    const check = validateDemand(true);
+    if (!check.valid) {
+      // DO NOT add all available stock to cart
+      // Alert buyer to reduce demand to stock available
+      showToast(check.msg);
+      qtyInput?.focus();
+      return;
+    }
+
+    Cart.add(item.id, check.demanded);
+    showToast(`Added ${check.demanded} × "${item.title}" to cart`);
+    addBtn.classList.add("added");
+    addBtn.textContent = "✓ Added to cart!";
+    setTimeout(() => {
+      addBtn.classList.remove("added");
+      addBtn.textContent = "Add to cart";
+    }, 1400);
+  });
+}
+
+load();
+</script>
+</body>
+</html>

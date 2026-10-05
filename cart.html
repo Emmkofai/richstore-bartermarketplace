@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Your shopping cart on RichStore.">
+<title>Your cart — RichStore</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  .delivery-box-title {
+    font-family: var(--font-heading);
+    font-weight: 700;
+  }
+  .order-confirm h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+  }
+  .order-confirm .order-id {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+<script>
+  try {
+    var _u = JSON.parse(localStorage.getItem('auth_user') || '{}');
+    if (_u && _u.accountType === 'seller') {
+      window.location.replace('/manage.html');
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<header class="site">
+  <div class="site-inner">
+    <a href="index.html" class="logo">RichStore<span class="dot">.</span></a>
+    <form class="searchbar" onsubmit="event.preventDefault(); location.href='index.html?search='+encodeURIComponent(this.q.value)">
+      <input type="text" name="q" placeholder="Search for anything…" autocomplete="off" aria-label="Search listings">
+      <button type="submit">Search</button>
+    </form>
+    <div class="nav-actions">
+      <a href="cart.html" class="cart-link" aria-label="Shopping cart">🛒 <span class="cart-count" id="cart-count">0</span></a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" style="padding-top:28px;" id="content">
+  <h1 class="section-title">Your cart</h1>
+  <div id="cart-body"><p>Loading…</p></div>
+</main>
+
+<footer class="site"><em>RichStore. Copyright © 2026</em></footer>
+
+<script src="js/cart.js"></script>
+<script>
+async function render() {
+  const body = document.getElementById("cart-body");
+
+  try {
+    const u = JSON.parse(localStorage.getItem('auth_user') || 'null');
+    if (u && u.accountType === 'seller') {
+      body.innerHTML = `
+        <div class="empty-state" style="max-width:540px;margin:40px auto;padding:40px 24px;text-align:center;background:#fff;border-radius:16px;border:1px solid #e2e8f0;">
+          <h2 style="font-size:22.4px;font-weight:700;color:#1E2B23;margin-bottom:8px;">Seller Account Restricted</h2>
+          <p style="color:var(--ink-lighter);font-size:15.7px;line-height:1.6;margin-bottom:20px;">
+            Sellers are not allowed to buy or add items to the cart. To purchase items on RichStore, please sign in with or create a buyer account.
+          </p>
+          <div style="display:flex;gap:12px;justify-content:center;">
+            <a href="/manage.html" class="btn primary" style="padding:10px 20px;">Manage Listings</a>
+            <a href="/signup.html" class="btn secondary" style="padding:10px 20px;">Create Buyer Account</a>
+          </div>
+        </div>
+      `;
+      return;
+    }
+  } catch (e) {}
+
+  const cart = Cart.read();
+  const keys = Object.keys(cart);
+
+  if (keys.length === 0) {
+    body.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🛒</div>
+        <p>Your cart is empty.</p>
+        <a href="index.html" class="btn primary" style="margin-top:10px;display:inline-block;">Browse listings</a>
+      </div>`;
+    return;
+  }
+
+  // Load all cart items in parallel
+  const results = await Promise.all(keys.map(async (key) => {
+    const entry = cart[key];
+    const listingId = entry.id;
+    try {
+      const res = await fetch("/api/listings/" + listingId);
+      if (res.ok) {
+        const { listing } = await res.json();
+        return {
+          ...listing,
+          cartKey: key,
+          qty: entry.qty
+        };
+      }
+      if (res.status === 404) Cart.remove(key);
+      return null;
+    } catch { return null; }
+  }));
+  const items = results.filter(Boolean);
+
+  if (items.length === 0) {
+    body.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🛒</div>
+        <p>Your cart is empty.</p>
+        <a href="index.html" class="btn primary" style="margin-top:10px;display:inline-block;">Browse listings</a>
+      </div>`;
+    return;
+  }
+
+  // Aggregate quantities across potential multiple entries of the same listing
+  const qtyByListing = {};
+  items.forEach(it => {
+    qtyByListing[it.id] = (qtyByListing[it.id] || 0) + it.qty;
+  });
+
+  const subtotal = Math.round(items.reduce((sum, it) => sum + it.price * it.qty, 0) * 100) / 100;
+  let siteFee = Math.round(subtotal * 0.05 * 100) / 100;
+  if (subtotal > 0 && siteFee < 1.0) siteFee = 1.0;
+  const anyOverdemand = items.some(it => (qtyByListing[it.id] || 0) > it.stock);
+  const grandTotal = Math.round((subtotal + siteFee) * 100) / 100;
+
+  body.innerHTML = `
+    <div class="cart-layout">
+      <div>
+        ${items.map(it => {
+          let src = '';
+          if (typeof it.emoji === 'string' && it.emoji.includes('<img')) {
+            const m = it.emoji.match(/src=["']([^"']+)["']/i);
+            if (m) src = m[1];
+          } else if (typeof it.emoji === 'string' && (
+            it.emoji.startsWith('/') ||
+            it.emoji.startsWith('http') ||
+            it.emoji.startsWith('data:') ||
+            it.emoji.includes('/') ||
+            /\.(jpg|jpeg|png|gif|webp|svg|avif)$/i.test(it.emoji)
+          )) {
+            src = it.emoji;
+          }
+          const media = src ? `<img src="${escapeHTML(src)}" alt="${escapeHTML(it.title || 'Item image')}">` : escapeHTML(it.emoji);
+          const totalForListing = qtyByListing[it.id] || it.qty;
+          const isOver = totalForListing > it.stock;
+          return `
+          <div class="cart-row" data-key="${escapeHTML(it.cartKey)}">
+            <div class="media">${media}</div>
+            <div>
+              <div class="title">${escapeHTML(it.title)}</div>
+              <div style="font-size:13.4px;color:var(--ink-lighter);margin-top:4px;">${it.stock} available in stock</div>
+            </div>
+            <input type="number" min="1" value="${escapeHTML(it.qty)}" class="qty-input ${isOver ? 'error' : ''}" data-key="${escapeHTML(it.cartKey)}" aria-label="Quantity for ${escapeHTML(it.title)}">
+            <div class="price-col">
+              <div class="price">${formatGHs(Number(it.price) * Number(it.qty))}</div>
+              ${it.qty > 1 ? `<div class="unit-price-sub">(${formatGHs(it.price)} each)</div>` : ''}
+            </div>
+            <button type="button" class="cart-item-close-btn" data-key="${escapeHTML(it.cartKey)}" aria-label="Remove ${escapeHTML(it.title)}" title="Remove item">&times;</button>
+            ${isOver ? `
+              <div class="stock-alert" style="grid-column:1/-1;margin-top:8px;margin-bottom:0;">
+                <span>The quantity demanded (${totalForListing}) is not equal to the quantity available (only ${it.stock} available). Please reduce your demand to the stock available.</span>
+              </div>
+            ` : ''}
+          </div>
+        `
+        }).join("")}
+      </div>
+      <div class="summary">
+        <div class="summary-row">
+          <span>Seller Price (${items.reduce((sum, it) => sum + it.qty, 0)} items)</span>
+          <span style="font-family:var(--font-numeric);font-variant-numeric:tabular-nums;font-weight:600;">${formatGHs(subtotal)}</span>
+        </div>
+        <div class="summary-row">
+          <span>Platform Site Charge (5%)</span>
+          <span style="font-family:var(--font-numeric);font-variant-numeric:tabular-nums;color:#2563eb;font-weight:600;">+${formatGHs(siteFee)}</span>
+        </div>
+        <div style="font-size:12.3px;color:#64748b;margin:-2px 0 6px;line-height:1.4;">
+          * Applied to the buyer's payable total; takes effect only once payment is confirmed received.
+        </div>
+        <div class="summary-total summary-row" style="border-top:2px solid #e2e8f0;padding-top:12px;margin-top:8px;">
+          <span>Amount Payable</span>
+          <span style="font-family:var(--font-numeric);font-variant-numeric:tabular-nums;color:#047857;font-size:24.6px;font-weight:800;">${formatGHs(grandTotal)}</span>
+        </div>
+
+        <div style="margin:12px 0 16px;padding:9px 14px;background:rgba(16, 185, 129, 0.08);border:1px solid rgba(16, 185, 129, 0.25);border-radius:10px;font-size:13.4px;font-weight:600;color:#065f46;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:17.9px;">🛡️</span>
+          <span>RichStore Direct Escrow Protection <span style="font-weight:400;color:#475569;font-size:12.3px;">(Funds withheld until delivery confirmation)</span></span>
+        </div>
+
+        <!-- Delivery Details for Order Management -->
+        <div class="delivery-details-box">
+          <div class="delivery-box-title">
+            <span>Delivery & Contact Details</span>
+          </div>
+          <div class="form-group">
+            <label for="buyer-name">Recipient / Buyer Name</label>
+            <input type="text" id="buyer-name" placeholder="e.g. James Brown" autocomplete="name">
+          </div>
+          <div class="form-group">
+            <label for="buyer-location">Delivery Location / Address *</label>
+            <input type="text" id="buyer-location" placeholder="e.g. East Legon, Accra" required autocomplete="street-address">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="buyer-phone">Contact Phone Number *</label>
+            <input type="tel" id="buyer-phone" placeholder="e.g. 024 000 0000" required autocomplete="tel">
+          </div>
+        </div>
+
+        ${anyOverdemand ? `
+          <div class="stock-alert" style="margin-top:16px;font-size:15.7px;">
+            <span>Some items exceed available stock. Please reduce your demand to the stock available before checkout.</span>
+          </div>
+        ` : ''}
+        <button class="btn primary" id="checkout-btn" ${anyOverdemand ? 'disabled' : ''} style="width:100%;padding:14px 20px;font-size:16.8px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <span>Pay & Secure (${formatGHs(grandTotal)})</span>
+        </button>
+
+        <!-- Account Protection Badge -->
+        <div style="margin-top:16px;padding:14px;background:#eff6ff;border:1px solid var(--tag-red);border-radius:1px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:20.2px;">🛡️</span>
+            <strong style="font-size:14.6px;color:#1e40af;text-transform:uppercase;letter-spacing:0.4px;">RichStore Buyer Account Protection</strong>
+          </div>
+          <p style="margin:0;font-size:13.4px;line-height:1.5;color:#1e3a8a;">
+            Your payment is held safely in account. Sellers receive their payout only after you receive your delivery and confirm completion. Platform site charges are applied to your total payable amount and take effect only when your payment has been confirmed received. 24-hour auto-refund guaranteed if unfulfilled.
+          </p>
+        </div>
+      </div>
+    </div>`;
+
+  // Pre-fill user info if logged in
+  try {
+    const u = JSON.parse(localStorage.getItem('auth_user') || 'null');
+    if (u) {
+      const nameInput = document.getElementById('buyer-name');
+      const locInput = document.getElementById('buyer-location');
+      const phoneInput = document.getElementById('buyer-phone');
+      if (nameInput && !nameInput.value) nameInput.value = u.name || u.username || '';
+      if (locInput && !locInput.value) locInput.value = u.gpsAddress || u.location || u.storeLocation || '';
+      if (phoneInput && !phoneInput.value) phoneInput.value = u.phone || '';
+    }
+  } catch {}
+
+  // Attach event handlers for qty inputs and remove buttons
+  body.querySelectorAll(".qty-input").forEach(input => {
+    input.addEventListener("change", (e) => {
+      const key = e.target.dataset.key;
+      const it = items.find(x => x.cartKey === key);
+      const qty = parseInt(e.target.value, 10);
+      if (isNaN(qty) || qty < 1) {
+        showToast("Please enter a valid quantity of at least 1.");
+        e.target.value = it ? it.qty : 1;
+        return;
+      }
+      if (it) {
+        const otherVariantsQty = (qtyByListing[it.id] || 0) - it.qty;
+        if (otherVariantsQty + qty > it.stock) {
+          const maxAllowed = Math.max(0, it.stock - otherVariantsQty);
+          const msg = `The quantity demanded is not equal to the quantity available (only ${maxAllowed} more available for this product). Please reduce your demand to the stock available.`;
+          showToast(msg);
+          e.target.classList.add("error");
+          e.target.value = it.qty;
+          return;
+        }
+      }
+      Cart.setQty(key, qty);
+      render();
+    });
+  });
+
+  body.querySelectorAll(".cart-item-close-btn, .remove-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const key = e.target.dataset.key;
+      Cart.remove(key);
+      render();
+    });
+  });
+
+  document.getElementById("checkout-btn")?.addEventListener("click", () => checkout(items));
+}
+
+// Retained only as a safety net. Checkout now hands off to pay.html: this screen
+// claimed the payment was "Confirmed & Secured" with funds "HELD" at a point where
+// no money had moved. If any path still calls it, redirect to the real payment page.
+function renderPaymentConfirmation(order) {
+  Cart.clear();
+  if (order && order.id) {
+    location.href = "/pay.html?order=" + encodeURIComponent(order.id);
+    return;
+  }
+  document.getElementById("content").innerHTML =
+    '<div class="wrap" style="padding:40px 16px;">Your order was created. Open your orders page to complete payment.</div>';
+  return;
+  const orderSubtotal = Number(order.subtotal) || 0;
+  const orderSiteFee = Number(order.siteFee) || 0;
+  const orderTotal = Number(order.total) || (orderSubtotal + orderSiteFee);
+
+  document.getElementById("content").innerHTML = `
+    <div class="order-confirm" style="max-width:580px;margin:30px auto;text-align:center;">
+      <div class="stamp" style="background:#047857;color:#fff;width:64px;height:64px;line-height:64px;font-size:35.8px;border-radius:50%;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;">✓</div>
+      <h1 class="section-title" style="justify-content:center;font-size:29.1px;margin-bottom:6px;color:#0f172a;">Payment Confirmed & Secured!</h1>
+      <p style="font-size:16.8px;color:var(--ink-lighter);margin:0 0 16px;">
+        Your funds have been received and are securely withheld in <strong>RichStore Account</strong>.
+      </p>
+      
+      <!-- Account Status Highlight Card -->
+      <div style="background:#ecfdf5;border:2px solid #a7f3d0;border-radius:14px;padding:18px 20px;text-align:left;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span style="font-size:26.9px;">🛡️</span>
+          <div>
+            <div style="font-weight:800;color:#065f46;font-size:17.9px;">SECURE ACCOUNT WITHHELD</div>
+            <div style="font-size:13.4px;color:#047857;">Protected by 24-Hour Non-Delivery Guarantee</div>
+          </div>
+          <div style="margin-left:auto;text-align:right;">
+            <div style="font-size:20.2px;font-weight:800;color:#047857;font-family:var(--font-numeric);font-variant-numeric:tabular-nums;">${formatGHs(orderTotal)}</div>
+            <div style="font-size:12.3px;color:#059669;font-weight:600;">Status: HELD</div>
+          </div>
+        </div>
+        <p style="margin:0;font-size:14.6px;line-height:1.55;color:#064e3b;">
+          The seller cannot claim payment until you receive your items in good condition and click <strong>"Confirm Delivery & Release Funds"</strong> on your orders page. If the seller fails to deliver within 24 hours, you receive a full refund directly to your mobile money or card.
+        </p>
+      </div>
+
+      <div class="order-id" style="font-size:17.9px;font-weight:800;letter-spacing:0.5px;color:#334155;margin-bottom:16px;">
+        Order Reference: ${escapeHTML(order.id)}
+      </div>
+
+      <!-- Financial Breakdown -->
+      <div style="margin:0 auto 24px;text-align:left;background:#f8fafc;padding:18px 20px;border-radius:14px;border:1px solid #cbd5e1;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:15.7px;color:#475569;">
+          <span>Seller Item Subtotal:</span>
+          <span style="font-weight:600;font-family:var(--font-numeric);font-variant-numeric:tabular-nums;color:#1e293b;">${formatGHs(orderSubtotal)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:15.7px;color:#475569;">
+          <span>Platform Site Charge (Applied):</span>
+          <span style="font-weight:600;font-family:var(--font-numeric);font-variant-numeric:tabular-nums;color:#2563eb;">+${formatGHs(orderSiteFee)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:20.2px;border-top:1px dashed #cbd5e1;padding-top:10px;margin-top:10px;color:#047857;">
+          <span>Total Paid by Buyer:</span>
+          <span style="font-family:var(--font-numeric);font-variant-numeric:tabular-nums;">${formatGHs(orderTotal)}</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <a href="buyer-orders.html" class="btn primary" style="padding:14px 28px;font-size:16.8px;font-weight:700;text-decoration:none;">
+          Track Order & Account Status
+        </a>
+        <a href="index.html" class="btn" style="padding:14px 28px;font-size:16.8px;font-weight:600;background:#f0f4f8;color:var(--ink);text-decoration:none;">
+          Continue Shopping
+        </a>
+      </div>
+    </div>`;
+}
+
+async function checkout(items = []) {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    showToast("Please sign in to complete checkout.");
+    setTimeout(() => { location.href = "/login.html?redirect=" + encodeURIComponent("/cart.html"); }, 1000);
+    return;
+  }
+
+  let u = null;
+  try { u = JSON.parse(localStorage.getItem('auth_user') || 'null'); } catch {}
+  if (u && u.accountType === 'seller') {
+    showToast("Seller accounts cannot make purchases. Please log in with a buyer account.");
+    return;
+  }
+
+  // Pre-validate before submitting
+  const qtyByListing = {};
+  items.forEach(it => {
+    qtyByListing[it.id] = (qtyByListing[it.id] || 0) + it.qty;
+  });
+
+  const overdemandItem = items.find(it => (qtyByListing[it.id] || 0) > it.stock);
+  if (overdemandItem) {
+    const totalDemanded = qtyByListing[overdemandItem.id];
+    showToast(`The quantity demanded (${totalDemanded}) for "${overdemandItem.title}" is not equal to the quantity available (only ${overdemandItem.stock} available). Please reduce your demand to the stock available.`);
+    return;
+  }
+
+  const buyerLocation = document.getElementById("buyer-location")?.value.trim() || "";
+  const buyerPhone = document.getElementById("buyer-phone")?.value.trim() || "";
+  const buyerName = document.getElementById("buyer-name")?.value.trim() || "";
+
+  if (!buyerLocation) {
+    showToast("Please enter your delivery location/address.");
+    document.getElementById("buyer-location")?.focus();
+    return;
+  }
+  if (!buyerPhone) {
+    showToast("Please enter your contact phone number.");
+    document.getElementById("buyer-phone")?.focus();
+    return;
+  }
+
+  const checkoutItems = items.map(it => ({
+    id: it.id,
+    qty: it.qty
+  }));
+
+  if (checkoutItems.length === 0) {
+    showToast("Your cart is empty");
+    return;
+  }
+
+  const btn = document.getElementById("checkout-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Processing order…";
+  }
+
+  const { ok, data } = await api.post("/api/checkout", {
+    items: checkoutItems,
+    buyerName,
+    buyerLocation,
+    buyerPhone
+  });
+
+  if (!ok) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Pay & Secure in Account";
+    }
+    showToast(data.error || "Checkout failed");
+    if (data && /authentication required|log in/i.test(data.error || "")) {
+      setTimeout(() => { location.href = "/login.html?redirect=" + encodeURIComponent("/cart.html"); }, 1200);
+    }
+    return;
+  }
+
+  const order = data.order || {};
+  // The order is created AWAITING PAYMENT — nothing is held and no fee is applied
+  // until a payment has been verified. Hand straight off to the payment page instead
+  // of showing a "payment confirmed" screen, which claimed funds were secured before
+  // the buyer had sent anything.
+  Cart.clear();
+  location.href = "/pay.html?order=" + encodeURIComponent(order.id || "");
+}
+
+render();
+</script>
+</body>
+</html>

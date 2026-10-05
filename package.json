@@ -1,0 +1,20 @@
+{
+  "name": "barter-marketplace",
+  "version": "1.0.0",
+  "description": "Browse, search, list items for sale, add to cart, and checkout — a working end-to-end clone of the core eBay flow.",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "admin": "node admin-server.js"
+  },
+  "keywords": [],
+  "author": "JAMES BROWN",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "africastalking": "^0.8.3",
+    "busboy": "^1.6.0",
+    "sharp": "^0.35.3"
+  }
+}

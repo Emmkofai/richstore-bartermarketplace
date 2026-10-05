@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Sell an item on RichStore — list your products for buyers to find.">
+<title>Sell an item — RichStore</title>
+<link rel="stylesheet" href="css/style.css">
+<script>
+  try {
+    var _u = JSON.parse(localStorage.getItem('auth_user') || '{}');
+    if (_u && _u.accountType === 'buyer') {
+      window.location.replace('/');
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<header class="site">
+  <div class="site-inner">
+    <a href="index.html" class="logo">RichStore<span class="dot">.</span></a>
+    <form class="searchbar" onsubmit="event.preventDefault(); location.href='index.html?search='+encodeURIComponent(this.q.value)">
+      <input type="text" name="q" placeholder="Search for anything…" autocomplete="off" aria-label="Search listings">
+      <button type="submit">Search</button>
+    </form>
+    <div class="nav-actions">
+      <a href="cart.html" class="cart-link" aria-label="Shopping cart">🛒 <span class="cart-count" id="cart-count">0</span></a>
+    </div>
+  </div>
+</header>
+
+<!-- OTP Verification Modal -->
+<div class="otp-overlay" id="otp-modal" style="display:none;">
+  <div class="otp-card">
+    <button type="button" class="otp-close-btn" id="otp-close-btn" aria-label="Close verification modal" title="Close">&times;</button>
+    <!-- Step 1: Enter phone -->
+    <div id="otp-step-phone">
+      <h2>Verify Your Phone</h2>
+      <p>Enter your phone number to receive a verification code before posting.</p>
+      <div class="field">
+        <label for="otp-phone" style="color:#1E2B23;">Phone number</label>
+        <input type="tel" id="otp-phone" placeholder="e.g. 050 123 4567" autocomplete="tel">
+      </div>
+      <button class="btn primary" id="otp-send-btn" type="button">Send verification code</button>
+      <div class="otp-timer" id="otp-error"></div>
+    </div>
+    <!-- Step 2: Enter code -->
+    <div id="otp-step-code" style="display:none;">
+      <h2>Enter Code</h2>
+      <p>We sent a 6-digit code to <span class="otp-phone-display" id="otp-phone-display"></span></p>
+      <div class="field">
+        <input type="text" id="otp-code" class="otp-code-input" maxlength="6" placeholder="000000" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
+      </div>
+      <button class="btn primary" id="otp-verify-btn" type="button">Verify</button>
+      <div class="otp-timer" id="otp-resend"></div>
+      <div class="otp-timer" id="otp-code-error"></div>
+    </div>
+    <!-- Step 3: Success -->
+    <div id="otp-step-success" style="display:none;">
+      <div class="otp-success">✓</div>
+      <h2>Phone Verified!</h2>
+      <p>You can now post items on RichStore.</p>
+      <button class="btn primary" id="otp-continue-btn" type="button">Continue to listing</button>
+    </div>
+  </div>
+</div>
+
+<main class="wrap sell-page" style="padding-top:28px;display:none;" id="sell-main">
+  
+  <form class="form-card" id="sell-form">
+    <div class="field">
+      <label for="title">Title</label>
+      <input type="text" id="title" required maxlength="120" placeholder="e.g. Vintage leather satchel">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="category">Category</label>
+        <select id="category" required>
+          <option value="Electronics">Electronics</option>
+          <option value="Fashion">Fashion</option>
+          <option value="Home">Home</option>
+          <option value="Collectibles">Collectibles</option>
+          <option value="Sports">Sports</option>
+          <option value="Books">Books</option>
+          <option value="Foot wares">Foot Wares</option>
+          <option value="Babies">Babies</option>
+          <option value="Home&Living">Home&Living</option>
+          <option value="Personal Care&Beauty">Personal Care&Beauty</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="condition">Condition</label>
+        <select id="condition" required>
+          <option>New</option>
+          <option>Used - Like New</option>
+          <option>Used - Good</option>
+          <option>Used - Fair</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="price">Price (GHs)</label>
+        <input type="number" id="price" min="0.01" step="0.01" required placeholder="0.00">
+      </div>
+      <div class="field">
+        <label for="stock">Quantity available</label>
+        <input type="number" id="stock" min="1" value="1" required>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="description">Description</label>
+      <textarea id="description" maxlength="2000" placeholder="Describe the item's condition, history, and any details a buyer should know."></textarea>
+    </div>
+
+    <div class="field">
+      <label for="phone">Your verified phone (buyers contact you on this number)</label>
+      <input type="tel" id="phone" placeholder="Filled in automatically after phone verification" autocomplete="tel" readonly aria-describedby="phone-hint">
+      <p class="hint" id="phone-hint" style="font-size:13.4px;color:var(--ink-lighter);margin-top:4px;">This is the phone number you verified by SMS OTP. It is filled in and locked automatically.</p>
+    </div>
+
+    <div class="field">
+      <label for="address">Address</label>
+      <input type="text" id="address" placeholder="e.g. Accra-Ghana, Madina." autocomplete="street-address">
+    </div>
+
+    <div class="field">
+      <label>Item images <span style="font-weight:400;color:var(--ink-soft);">(up to 5)</span></label>
+      <div id="image-slots" class="image-slots">
+        <div class="image-slot add-slot" id="add-image-slot" role="button" tabindex="0" aria-label="Upload an image">
+          <div class="slot-placeholder">
+            <div class="slot-add-bubble">📷</div>
+            <span class="slot-add-title">Add photo</span>
+            <span class="slot-add-sub">Click or drag</span>
+          </div>
+        </div>
+      </div>
+      <div id="image-policy-error" style="display:none;margin-top:10px;padding:10px 14px;background:#FDF2F2;border:1px solid #F87171;border-radius:8px;color:#991B1B;font-size:14.6px;line-height:1.5;"></div>
+      <input type="file" id="image-input" accept="image/*" hidden>
+      <p class="hint">Upload up to 5 photos. The first image will be the main listing image. Drag to reorder.</p>
+    </div>
+
+    <div class="field">
+      <label for="emoji">Listing icon</label>
+      <select id="emoji">
+        <option value="📦">📦 Box</option>
+        <option value="📷">📷 Camera</option>
+        <option value="⌨️">⌨️ Keyboard</option>
+        <option value="🧥">🧥 Jacket</option>
+        <option value="🍳">🍳 Kitchenware</option>
+        <option value="🚴">🚴 Sports gear</option>
+        <option value="🎧">🎧 Audio</option>
+        <option value="👜">👜 Bag</option>
+        <option value="🧭">🧭 Collectible</option>
+        <option value="📚">📚 Books</option>
+      </select>
+    </div>
+
+    <div id="form-policy-error" style="display:none;margin-bottom:14px;padding:12px 16px;background:#FDF2F2;border:1px solid #F87171;border-radius:8px;color:#991B1B;font-size:14.6px;line-height:1.5;"></div>
+
+    <button type="submit" class="btn primary" id="submit-btn" disabled title="Verify your phone number to enable posting" style="width:100%;padding:13px;">Post item</button>
+    <p style="font-size:13.4px;color:var(--ink-lighter);text-align:center;margin-top:14px;line-height:1.5;">
+      By posting, you agree to RichStore's <a href="posting-policy.html" target="_blank" style="color:var(--paper-raised);font-weight:700;text-decoration:underline;">Product Posting & Content Policy</a>. 
+      Listings with nudity, adult/sexual content, blurry images, or misleading descriptions will be automatically rejected.
+    </p>
+  </form>
+</main>
+
+<footer class="site"><em>RichStore. Copyright © 2026</em></footer>
+
+<script src="js/cart.js"></script>
+<script>
+// ---- Auth & Phone Verification Flow ----
+let currentUser = null;
+let verifiedPhone = null;
+
+// "Post item" stays disabled until the phone is OTP-verified, so a seller cannot
+// dismiss the modal and then hit a 403 on submit.
+function setSubmitEnabled(enabled) {
+  const btn = document.getElementById('submit-btn');
+  if (!btn) return;
+  btn.disabled = !enabled;
+  btn.title = enabled ? '' : 'Verify your phone number to enable posting';
+}
+
+(async function initSellPage() {
+  const token = localStorage.getItem('auth_token');
+  const r = await fetch('/api/me', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+  if (!r.ok) {
+    location.href = '/login.html?redirect=/sell.html';
+    return;
+  }
+  const { user } = await r.json();
+  currentUser = user;
+
+  // Gating: Buyer accounts cannot access the sell item page
+  if (user.accountType === 'buyer') {
+    location.replace('/');
+    return;
+  }
+
+  if (user.phoneVerified) {
+    // Already verified — go straight to form
+    document.getElementById('sell-main').style.display = '';
+    setSubmitEnabled(true);
+    const phoneEl = document.getElementById('phone');
+    if (phoneEl && user.phone) {
+      phoneEl.value = user.phone;
+      phoneEl.readOnly = true;
+    }
+    const addrEl = document.getElementById('address');
+    if (addrEl && (user.storeLocation || user.storeGpsAddress)) {
+      addrEl.value = user.storeLocation || user.storeGpsAddress;
+    }
+  } else {
+    // Show OTP modal
+    document.getElementById('otp-modal').style.display = 'flex';
+    if (user.phone) {
+      document.getElementById('otp-phone').value = user.phone;
+    }
+  }
+})();
+
+// ---- OTP Modal Logic ----
+const otpModal = document.getElementById('otp-modal');
+const otpStepPhone = document.getElementById('otp-step-phone');
+const otpStepCode = document.getElementById('otp-step-code');
+const otpStepSuccess = document.getElementById('otp-step-success');
+const otpPhoneInput = document.getElementById('otp-phone');
+const otpCodeInput = document.getElementById('otp-code');
+const otpSendBtn = document.getElementById('otp-send-btn');
+const otpVerifyBtn = document.getElementById('otp-verify-btn');
+const otpError = document.getElementById('otp-error');
+const otpCodeError = document.getElementById('otp-code-error');
+const otpResend = document.getElementById('otp-resend');
+let otpPhoneValue = '';
+let resendTimer = null;
+
+// Step 1: Send OTP
+otpSendBtn.addEventListener('click', async () => {
+  otpError.textContent = '';
+  const phone = otpPhoneInput.value.trim();
+  if (!phone) {
+    otpError.textContent = 'Please enter your phone number.';
+    return;
+  }
+  otpSendBtn.disabled = true;
+  otpSendBtn.textContent = 'Sending…';
+
+  const { ok, data } = await api.post('/api/send-otp', { phone });
+
+  if (!ok) {
+    otpError.textContent = data.error || 'Failed to send code';
+    otpSendBtn.disabled = false;
+    otpSendBtn.textContent = 'Send verification code';
+    return;
+  }
+
+  otpPhoneValue = data.phone;
+  // Show the code in a toast for dev convenience
+  if (data.devCode) showToast('Dev OTP: ' + data.devCode);
+
+  // Move to step 2
+  otpStepPhone.style.display = 'none';
+  otpStepCode.style.display = '';
+  document.getElementById('otp-phone-display').textContent = otpPhoneValue;
+  otpCodeInput.focus();
+  startResendCooldown(60);
+
+  otpSendBtn.disabled = false;
+  otpSendBtn.textContent = 'Send verification code';
+});
+
+// Step 2: Verify OTP
+otpVerifyBtn.addEventListener('click', async () => {
+  otpCodeError.textContent = '';
+  const code = otpCodeInput.value.trim();
+  if (!code || code.length !== 6) {
+    otpCodeError.textContent = 'Please enter the 6-digit code.';
+    return;
+  }
+  otpVerifyBtn.disabled = true;
+  otpVerifyBtn.textContent = 'Verifying…';
+
+  const { ok, data } = await api.post('/api/verify-otp', { phone: otpPhoneValue, code });
+
+  if (!ok) {
+    otpCodeError.textContent = data.error || 'Verification failed';
+    otpVerifyBtn.disabled = false;
+    otpVerifyBtn.textContent = 'Verify';
+    return;
+  }
+
+  // Success!
+  otpStepCode.style.display = 'none';
+  otpStepSuccess.style.display = '';
+  verifiedPhone = otpPhoneValue;
+  if (resendTimer) { clearInterval(resendTimer); resendTimer = null; } // stop the resend countdown
+  try {
+    const authUser = JSON.parse(localStorage.getItem('auth_user') || '{}');
+    authUser.phoneVerified = true;
+    localStorage.setItem('auth_user', JSON.stringify(authUser));
+    if (typeof updateAuthUI === 'function') updateAuthUI();
+  } catch {}
+});
+
+// Close button handler for OTP modal
+document.getElementById('otp-close-btn')?.addEventListener('click', () => {
+  otpModal.style.display = 'none';
+  if (verifiedPhone || (currentUser && currentUser.phoneVerified)) {
+    document.getElementById('sell-main').style.display = '';
+    const phoneField = document.getElementById('phone');
+    if (phoneField) {
+      phoneField.value = verifiedPhone || (currentUser && currentUser.phone) || phoneField.value;
+      phoneField.readOnly = true;
+    }
+    setSubmitEnabled(true);
+  } else {
+    showToast('Phone verification is required to post items.');
+    setTimeout(() => {
+      location.href = '/manage.html';
+    }, 1200);
+  }
+});
+
+// Continue button after success
+document.getElementById('otp-continue-btn').addEventListener('click', () => {
+  otpModal.style.display = 'none';
+  document.getElementById('sell-main').style.display = '';
+  setSubmitEnabled(true);
+  // Pre-fill phone field with the verified number and lock it — the server only
+  // accepts the phone that was verified via OTP for this account.
+  const phoneField = document.getElementById('phone');
+  phoneField.value = verifiedPhone || '';
+  phoneField.readOnly = true;
+  phoneField.title = 'Your verified phone number — verified via SMS OTP';
+});
+
+// Resend cooldown timer
+function startResendCooldown(seconds) {
+  let remaining = seconds;
+  if (resendTimer) clearInterval(resendTimer);
+  otpResend.innerHTML = `Resend code in <b>${remaining}s</b>`;
+  resendTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(resendTimer);
+      otpResend.innerHTML = `Didn't receive it? <a id="resend-link">Resend code</a>`;
+      document.getElementById('resend-link').addEventListener('click', async () => {
+        otpCodeError.textContent = '';
+        const { ok, data } = await api.post('/api/send-otp', { phone: otpPhoneValue });
+        if (!ok) {
+          otpCodeError.textContent = data.error || 'Failed to resend';
+          return;
+        }
+        if (data.devCode) showToast('Dev OTP: ' + data.devCode);
+        showToast('New code sent!');
+        startResendCooldown(60);
+      });
+    } else {
+      otpResend.innerHTML = `Resend code in <b>${remaining}s</b>`;
+    }
+  }, 1000);
+}
+
+// Allow Enter key on code input
+otpCodeInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); otpVerifyBtn.click(); }
+});
+otpPhoneInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); otpSendBtn.click(); }
+});
+
+const imageInput = document.getElementById("image-input");
+const addSlot = document.getElementById("add-image-slot");
+const slotsContainer = document.getElementById("image-slots");
+let uploadedImages = []; // array of paths
+
+function renderImageSlots() {
+  // Remove existing preview slots
+  slotsContainer.querySelectorAll('.image-slot.preview-slot').forEach(el => el.remove());
+
+  uploadedImages.forEach((path, index) => {
+    const slot = document.createElement('div');
+    slot.className = 'image-slot preview-slot';
+    slot.innerHTML = `
+      <div class="slot-backdrop" style="background-image: url('${escapeHTML(path)}');"></div>
+      <img src="${escapeHTML(path)}" alt="Image ${index + 1}" loading="lazy">
+      <button type="button" class="slot-remove" aria-label="Remove image">&times;</button>
+      ${index === 0 ? '<span class="slot-badge">Main</span>' : ''}
+    `;
+    slot.querySelector('.slot-remove').addEventListener('click', (e) => {
+      e.stopPropagation();
+      uploadedImages.splice(index, 1);
+      renderImageSlots();
+    });
+    slotsContainer.insertBefore(slot, addSlot);
+  });
+
+  // Show/hide add button based on count
+  if (uploadedImages.length >= 5) {
+    addSlot.style.display = 'none';
+  } else {
+    addSlot.style.display = '';
+  }
+}
+
+async function handleImageFile(file) {
+  if (!file || !file.type.startsWith("image/")) {
+    showToast("Please upload a valid image file.");
+    return;
+  }
+  if (uploadedImages.length >= 5) {
+    showToast("Maximum 5 images allowed.");
+    return;
+  }
+  const imgError = document.getElementById("image-policy-error");
+  if (imgError) imgError.style.display = 'none';
+
+  addSlot.classList.add('uploading');
+  addSlot.querySelector('.slot-placeholder').innerHTML = '<div class="slot-add-bubble">⏳</div><span class="slot-add-title">Uploading…</span>';
+  const { ok, data } = await api.uploadImage(file);
+  addSlot.classList.remove('uploading');
+  addSlot.querySelector('.slot-placeholder').innerHTML = '<div class="slot-add-bubble">📷</div><span class="slot-add-title">Add photo</span><span class="slot-add-sub">Click or drag</span>';
+  if (!ok) {
+    if (imgError) {
+      imgError.style.display = 'block';
+      imgError.innerHTML = `<strong>Upload Rejected:</strong> ${escapeHTML(data.error || 'Image upload failed.')}${data.clause ? `<br><span style="font-size:13.4px;color:#7F1D1D;display:block;margin-top:4px;"><b>Policy:</b> ${escapeHTML(data.clause)}</span>` : ''}`;
+    }
+    showToast(data.error || 'Image upload failed', 4000);
+    return;
+  }
+  uploadedImages.push(data.path);
+  renderImageSlots();
+}
+
+addSlot.addEventListener("click", () => imageInput.click());
+addSlot.addEventListener("keydown", (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); imageInput.click(); } });
+
+// Drag and drop on the whole slots area
+slotsContainer.addEventListener("dragover", (e) => { e.preventDefault(); addSlot.classList.add("dragover"); });
+slotsContainer.addEventListener("dragleave", () => addSlot.classList.remove("dragover"));
+slotsContainer.addEventListener("drop", (e) => {
+  e.preventDefault();
+  addSlot.classList.remove("dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) handleImageFile(file);
+});
+
+imageInput.addEventListener("change", () => {
+  if (imageInput.files[0]) handleImageFile(imageInput.files[0]);
+  imageInput.value = '';
+});
+
+document.getElementById("sell-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const formError = document.getElementById("form-policy-error");
+  if (formError) formError.style.display = 'none';
+
+  const priceValue = parseFloat(document.getElementById("price").value);
+  if (!Number.isFinite(priceValue) || priceValue <= 0) {
+    showToast('Please enter a price greater than 0.');
+    const priceInput = document.getElementById("price");
+    if (priceInput) priceInput.focus();
+    return;
+  }
+
+  const mainImage = uploadedImages.length > 0 ? uploadedImages[0] : document.getElementById("emoji").value;
+  const payload = {
+    title: document.getElementById("title").value.trim(),
+    category: document.getElementById("category").value,
+    condition: document.getElementById("condition").value,
+    price: priceValue,
+    stock: parseInt(document.getElementById("stock").value, 10),
+    description: document.getElementById("description").value.trim(),
+    sellerPhone: document.getElementById("phone").value.trim(),
+    sellerAddress: document.getElementById("address") ? document.getElementById("address").value.trim() : "",
+    emoji: mainImage,
+    images: uploadedImages,
+  };
+
+  const { ok, data } = await api.post("/api/listings", payload);
+  if (!ok) {
+    if (formError) {
+      formError.style.display = 'block';
+      formError.innerHTML = `<strong>Listing Rejected:</strong> ${escapeHTML(data.error || "Something went wrong")}${data.clause ? `<br><span style="font-size:13.4px;color:#7F1D1D;display:block;margin-top:4px;"><b>Policy:</b> ${escapeHTML(data.clause)}</span>` : ''}`;
+      formError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    showToast(data.error || "Something went wrong", 4000);
+    return;
+  }
+
+  showToast('Listing created!');
+  setTimeout(() => location.href = "/item.html?id=" + data.listing.id, 900);
+});
+</script>
+</body>
+</html>

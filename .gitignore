@@ -1,0 +1,35 @@
+# ---------------------------------------------------------------------------
+# RichStore storefront — files that must never be committed
+# ---------------------------------------------------------------------------
+
+# Secrets and local configuration. `.env.example` IS committed — it is the template.
+.env
+.env.*
+!.env.example
+
+# Live database. Contains password hashes, session tokens, orders and payout
+# records. Shipping this to a repository leaks every account on the site.
+db.json
+db.json.*
+*.tmp.*
+*.pplsnw
+
+# User-uploaded listing images — included for hosting.
+# public/uploads/*
+# !public/uploads/.gitkeep
+
+# Dependencies and build output — restored with `npm install`.
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Logs and database backups.
+*.log
+backups/
+
+# OS and editor noise.
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
